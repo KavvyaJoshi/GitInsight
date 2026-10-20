@@ -37,6 +37,8 @@ export const config = {
     .filter(Boolean),
   seedDemoUsers: env.SEED_DEMO_USERS === 'true',
   corsOrigin: env.CORS_ORIGIN ?? 'http://localhost:5173',
+  // Proxies in front of the API (Render = 1; Vercel forwarding to Render = 2), so req.ip is the real visitor.
+  trustProxy: Number(env.TRUST_PROXY ?? 1),
   redisUrl: env.REDIS_URL ?? '',
   githubToken: env.GITHUB_TOKEN ?? '',
   githubTimeoutMs: 8000,

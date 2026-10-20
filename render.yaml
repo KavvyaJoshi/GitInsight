@@ -1,0 +1,46 @@
+# Render Blueprint: the GitInsight API (with the background alert scheduler running in-process).
+# Create it from the Render dashboard: New → Blueprint → pick this repository.
+services:
+  - type: web
+    name: gitinsight-api
+    runtime: node
+    plan: free
+    # Closest free region to the MongoDB Atlas (Mumbai) and Redis Cloud (ap-south-1) databases.
+    region: singapore
+    buildCommand: npm ci --workspace apps/server
+    startCommand: npm run start --workspace apps/server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Free plans have no separate worker, so alerts are checked inside the API process.
+      - key: RUN_WORKER_IN_API
+        value: "true"
+      - key: SEED_DEMO_USERS
+        value: "false"
+      # Requests arrive via Vercel and then Render's proxy.
+      - key: TRUST_PROXY
+        value: "2"
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_MODEL
+        value: gemini-3.5-flash-lite
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      # Secrets and URLs: you fill these in on Render during setup (never committed).
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
