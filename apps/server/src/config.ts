@@ -27,4 +27,8 @@ export const config = {
     .filter(Boolean),
   seedDemoUsers: env.SEED_DEMO_USERS === 'true',
   corsOrigin: env.CORS_ORIGIN ?? 'http://localhost:5173',
+  redisUrl: env.REDIS_URL ?? '',
+  githubToken: env.GITHUB_TOKEN ?? '',
+  githubTimeoutMs: 8000,
+  metadataTtlSec: Number(env.METADATA_TTL_SECONDS ?? 15 * 60),
 };

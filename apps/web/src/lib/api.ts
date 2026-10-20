@@ -17,6 +17,36 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface RepositoryMetadata {
+  id: number;
+  owner: { login: string; avatarUrl: string; type: string; url: string };
+  name: string;
+  fullName: string;
+  description: string | null;
+  url: string;
+  homepage: string | null;
+  stars: number;
+  forks: number;
+  watchers: number | null;
+  openIssues: number;
+  language: string | null;
+  license: { spdxId: string | null; name: string } | null;
+  sizeKb: number;
+  topics: string[];
+  defaultBranch: string;
+  createdAt: string;
+  updatedAt: string;
+  pushedAt: string | null;
+  archived: boolean;
+  isFork: boolean;
+}
+
+export interface RepositoryResponse {
+  repository: RepositoryMetadata;
+  fetchedAt: string;
+  source: 'cache' | 'github' | 'stale';
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
