@@ -31,6 +31,10 @@
   --heat-2: #34d399;
   --heat-3: #059669;
   --heat-4: #065f46;
+  --tree-bark: #8b5e3c;
+  --tree-bark-dark: #6b4529;
+  --tree-grass: #bbf7d0;
+  --tree-apple: #e34948;
 }
 .dark {
   --chart-1: #3987e5;
@@ -51,6 +55,70 @@
   --heat-2: #047857;
   --heat-3: #10b981;
   --heat-4: #6ee7b7;
+  --tree-bark: #a9764d;
+  --tree-bark-dark: #7c5434;
+  --tree-grass: #14532d;
+  --tree-apple: #e66767;
+}
+
+/* Branch tree: limbs draw themselves, leaves pop in, the crown sways. */
+@keyframes tree-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes tree-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes tree-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tree-sway {
+  0%,
+  100% {
+    transform: rotate(-0.7deg);
+  }
+  50% {
+    transform: rotate(0.7deg);
+  }
+}
+.tree-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: tree-draw 0.9s ease-out forwards;
+}
+.tree-grow {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: tree-grow 0.8s ease-out both;
+}
+.tree-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tree-pop 0.45s ease-out both;
+}
+.tree-sway {
+  transform-origin: 400px 490px;
+  animation: tree-sway 7s ease-in-out 2.5s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-draw,
+  .tree-grow,
+  .tree-pop,
+  .tree-sway {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 @layer base {

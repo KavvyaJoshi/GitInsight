@@ -5,6 +5,7 @@ import type { Branches, CommitTrend, Contributors, Frequency, Heatmap, Languages
 import { compactNumber, exactNumber, formatDate } from '../../lib/format';
 import { useAnalytics } from '../../lib/useAnalytics';
 import { Button } from '../ui';
+import { BranchTree } from './BranchTree';
 import { CommitHeatmap, longestStreak } from './Heatmap';
 import { AnalyticsPanel, ChartTooltip, DataTable, SummaryRow } from './Panel';
 
@@ -354,7 +355,7 @@ export function FrequencyView({ repoId }: { repoId: number }) {
 
 // ---- Branches ----
 
-export function BranchesView({ repoId }: { repoId: number }) {
+export function BranchesView({ repoId, repoUrl }: { repoId: number; repoUrl: string }) {
   const [page, setPage] = useState(1);
   const { state, retry } = useAnalytics<Branches>(`/repositories/${repoId}/branches?page=${page}`);
   const loaded = state.status === 'ready' ? state.result.data : null;
@@ -362,17 +363,40 @@ export function BranchesView({ repoId }: { repoId: number }) {
   return (
     <AnalyticsPanel
       title="Branches"
-      description="Every branch in the repository, fifty per page."
+      description="Every branch in the repository, grown as a tree. Fifty branches per page."
       state={state}
       onRetry={retry}
+      viewLabels={{ chart: 'Tree', table: 'List' }}
       summary={(d) => (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-          <GitBranch className="size-4 text-emerald-700 dark:text-emerald-400" aria-hidden />
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">Default branch</span>
-          <span className="font-mono text-sm font-medium">{d.defaultBranch}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+            <GitBranch className="size-4 text-emerald-700 dark:text-emerald-400" aria-hidden />
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">Default branch</span>
+            <span className="font-mono text-sm font-medium">{d.defaultBranch}</span>
+          </div>
+          {d.totalPages > 1 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-500">
+                Page {d.page} of {d.totalPages}
+              </span>
+              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!loaded || page >= loaded.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                aria-label="Next page"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
-      chart={(d) => (
+      chart={(d) => <BranchTree branches={d.branches} defaultBranch={d.defaultBranch} repoUrl={repoUrl} morePages={d.totalPages > 1} />}
+      table={(d) => (
         <div>
           <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-zinc-800/70 dark:border-zinc-800">
             {d.branches.map((b) => (
@@ -390,21 +414,6 @@ export function BranchesView({ repoId }: { repoId: number }) {
               </li>
             ))}
           </ul>
-          {d.totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-zinc-500">
-                Page {d.page} of {d.totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                  <ChevronLeft className="size-4" /> Previous
-                </Button>
-                <Button variant="secondary" size="sm" disabled={!loaded || page >= loaded.totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     />

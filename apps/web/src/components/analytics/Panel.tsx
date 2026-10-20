@@ -17,6 +17,8 @@ interface PanelProps<T> {
   table?: (data: T) => ReactNode;
   isEmpty?: (data: T) => boolean;
   emptyMessage?: string;
+  /** Labels for the chart/table toggle. */
+  viewLabels?: { chart: string; table: string };
 }
 
 function errorMessage(error: unknown): string {
@@ -26,7 +28,18 @@ function errorMessage(error: unknown): string {
 }
 
 /** One analytics view with its own loading, pending, empty, error and retry states (REQ-DASH-002). */
-export function AnalyticsPanel<T>({ title, description, state, onRetry, summary, chart, table, isEmpty, emptyMessage }: PanelProps<T>) {
+export function AnalyticsPanel<T>({
+  title,
+  description,
+  state,
+  onRetry,
+  summary,
+  chart,
+  table,
+  isEmpty,
+  emptyMessage,
+  viewLabels = { chart: 'Chart', table: 'Table' },
+}: PanelProps<T>) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const ready = state.status === 'ready' ? state.result : null;
   const empty = ready && isEmpty?.(ready.data);
@@ -45,12 +58,12 @@ export function AnalyticsPanel<T>({ title, description, state, onRetry, summary,
                 key={v}
                 onClick={() => setView(v)}
                 aria-pressed={view === v}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs capitalize transition-colors ${
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${
                   view === v ? 'bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                 }`}
               >
                 {v === 'chart' ? <BarChart3 className="size-3.5" /> : <Table2 className="size-3.5" />}
-                {v}
+                {viewLabels[v]}
               </button>
             ))}
           </div>
