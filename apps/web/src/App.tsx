@@ -1,4 +1,5 @@
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { RequireAuth } from './auth/RequireAuth';
 import { Navbar } from './components/Navbar';
 import AccountPage from './pages/AccountPage';
@@ -12,10 +13,13 @@ import RegisterPage from './pages/RegisterPage';
 import RepoPage from './pages/RepoPage';
 
 export default function App() {
+  // Navigating to another page clears a crashed page.
+  const location = useLocation();
   return (
     <div className="flex min-h-dvh flex-col">
       <Navbar />
       <main className="flex-1">
+        <ErrorBoundary variant="page" key={location.pathname}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -48,6 +52,7 @@ export default function App() {
           <Route path="/:owner/:repo" element={<RepoPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </ErrorBoundary>
       </main>
       <footer className="border-t border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between sm:px-6">

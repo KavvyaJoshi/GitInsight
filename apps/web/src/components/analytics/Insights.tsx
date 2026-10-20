@@ -140,6 +140,21 @@ function SummarySection({ icon, title, children }: { icon: ReactNode; title: str
   );
 }
 
+type ReadySummary = Extract<AiSummary, { available: true }>;
+
+/** Fill in missing fields so a summary cached in an older format (summary + highlights) still renders. */
+function normaliseSummary(d: ReadySummary): ReadySummary {
+  const legacy = d as Partial<ReadySummary> & { summary?: string; highlights?: string[] };
+  return {
+    ...d,
+    whatItIs: legacy.whatItIs ?? legacy.summary ?? '',
+    whatsHappening: legacy.whatsHappening ?? '',
+    currentWork: legacy.currentWork ?? legacy.highlights ?? [],
+    terms: legacy.terms ?? [],
+    sources: legacy.sources ?? [],
+  };
+}
+
 export function AiSummaryView({ repoId }: { repoId: number }) {
   const { state, retry } = useAnalytics<AiSummary>(`/repositories/${repoId}/ai-summary`);
   return (
@@ -148,19 +163,21 @@ export function AiSummaryView({ repoId }: { repoId: number }) {
       description="This project in plain English: what it is, what’s happening, and what the team is working on."
       state={state}
       onRetry={retry}
-      chart={(d) =>
-        !d.available ? (
-          <AiUnavailableNotice message={d.message} />
-        ) : (
+      chart={(raw) => {
+        if (!raw.available) return <AiUnavailableNotice message={raw.message} />;
+        const d = normaliseSummary(raw);
+        return (
           <AiFrame model={d.model} generatedAt={d.generatedAt} sources={d.sources}>
             <div className="space-y-7">
               <SummarySection icon={<BookOpen className="size-4" />} title="What it is">
                 <p className="max-w-3xl text-[17px] leading-relaxed text-pretty">{d.whatItIs}</p>
               </SummarySection>
 
-              <SummarySection icon={<Activity className="size-4" />} title="What’s happening">
-                <p className="max-w-3xl leading-relaxed text-pretty text-zinc-700 dark:text-zinc-300">{d.whatsHappening}</p>
-              </SummarySection>
+              {d.whatsHappening && (
+                <SummarySection icon={<Activity className="size-4" />} title="What’s happening">
+                  <p className="max-w-3xl leading-relaxed text-pretty text-zinc-700 dark:text-zinc-300">{d.whatsHappening}</p>
+                </SummarySection>
+              )}
 
               <SummarySection icon={<Hammer className="size-4" />} title="Working on now">
                 {d.currentWork.length ? (
@@ -191,8 +208,8 @@ export function AiSummaryView({ repoId }: { repoId: number }) {
               )}
             </div>
           </AiFrame>
-        )
-      }
+        );
+      }}
     />
   );
 }

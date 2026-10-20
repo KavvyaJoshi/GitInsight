@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Sparkles, Timer, TreeDeciduous, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { BookmarkButton } from '../components/BookmarkButton';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ExportMenu } from '../components/ExportMenu';
 import { AlertButton } from '../components/alerts/AlertButton';
 import {
@@ -77,9 +78,11 @@ function HealthBadge({ repoId, onOpen }: { repoId: number; onOpen: () => void })
 }
 
 type LoadState = { status: 'loading' } | { status: 'error'; error: unknown } | { status: 'ready'; data: RepositoryResponse };
+// Each result remembers which owner/repo it was loaded for.
+type KeyedState = LoadState & { key?: string };
 
 function useRepository(ref: RepoRef | null) {
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [state, setState] = useState<KeyedState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const key = ref ? `${ref.owner}/${ref.repo}` : null;
 
@@ -89,14 +92,17 @@ function useRepository(ref: RepoRef | null) {
     let cancelled = false;
     setState({ status: 'loading' });
     api<RepositoryResponse>(`/repositories/search?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
-      .then((data) => !cancelled && setState({ status: 'ready', data }))
-      .catch((error) => !cancelled && setState({ status: 'error', error }));
+      .then((data) => !cancelled && setState({ status: 'ready', data, key }))
+      .catch((error) => !cancelled && setState({ status: 'error', error, key }));
     return () => {
       cancelled = true;
     };
   }, [key, attempt]);
 
-  return { state, retry: useCallback(() => setAttempt((n) => n + 1), []) };
+  // Right after navigating to another repository the previous result is still in state for one render.
+  // Treat it as loading, otherwise the canonical-name redirect below would send the user straight back.
+  const current: LoadState = state.key === key ? state : { status: 'loading' };
+  return { state: current, retry: useCallback(() => setAttempt((n) => n + 1), []) };
 }
 
 function ErrorState({ error, owner, repo, onRetry }: { error: unknown; owner: string; repo: string; onRetry: () => void }) {
@@ -247,7 +253,12 @@ export default function RepoPage() {
             {(() => {
               if (!meta) return <OverviewSkeleton />;
               const View = ANALYTICS_VIEWS[tab.slug];
-              return View ? <View key={meta.id} repoId={meta.id} repoUrl={meta.url} /> : <OverviewCard repo={meta} />;
+              // A crash in one tab stays inside that tab; switching tab or repository starts fresh.
+              return (
+                <ErrorBoundary key={`${meta.id}:${tab.slug}`}>
+                  {View ? <View repoId={meta.id} repoUrl={meta.url} /> : <OverviewCard repo={meta} />}
+                </ErrorBoundary>
+              );
             })()}
             {data && tab.slug === 'overview' && (
               <p className="text-xs text-zinc-400">
