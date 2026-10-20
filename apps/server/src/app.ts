@@ -42,6 +42,11 @@ export function createApp() {
     repositoriesRouter,
   );
 
+  // Comparisons fan out to GitHub and the AI provider, so they get their own budget per visitor.
+  app.use(
+    '/api/comparisons',
+    rateLimit({ windowMs: 60_000, limit: 20, skip: () => config.isTest, standardHeaders: 'draft-8', legacyHeaders: false }),
+  );
   app.use('/api', personalRouter);
 
   app.use('/api', (_req, res) => {

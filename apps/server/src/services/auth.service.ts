@@ -3,6 +3,8 @@ import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config';
 import { HttpError } from '../lib/errors';
 import { User, type Role, type UserDoc } from '../models/User';
+import { isBlockedDemoAccount } from '../seed';
+import { revokeAllSessionsForUser } from './tokens';
 
 const googleClient = new OAuth2Client();
 // Compared against when the email is unknown so response time does not reveal which accounts exist.
@@ -21,19 +23,26 @@ function accountLocked(lockUntil: Date) {
   );
 }
 
-function roleForEmail(email: string): Role {
-  return config.adminEmails.includes(email) ? 'admin' : 'user';
-}
+/**
+ * ADMIN_EMAILS only applies to Google sign-ins: Google has verified the person owns that address.
+ * Password sign-ups never verify the email, so anyone could otherwise register an admin's address first.
+ */
+const isAdminEmail = (email: string) => config.adminEmails.includes(email);
 
 export async function registerWithPassword(input: { email: string; password: string; name?: string }): Promise<UserDoc> {
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
   }
   const passwordHash = await bcrypt.hash(input.password, config.bcryptRounds);
-  return User.create({ email: input.email, name: input.name ?? '', passwordHash, hasPassword: true, role: roleForEmail(input.email) });
+  return User.create({ email: input.email, name: input.name ?? '', passwordHash, hasPassword: true, role: 'user' as Role });
 }
 
 export async function loginWithPassword(email: string, password: string): Promise<UserDoc> {
+  // The seeded demo accounts have public passwords; refuse them where that would be a real risk.
+  if (isBlockedDemoAccount(email)) {
+    await bcrypt.compare(password, DUMMY_HASH);
+    throw invalidCredentials();
+  }
   const user = await User.findOne({ email }).select('+passwordHash');
   if (!user) {
     await bcrypt.compare(password, DUMMY_HASH);
@@ -80,13 +89,25 @@ export async function loginWithGoogle(credential: string): Promise<UserDoc> {
 
   const email = payload.email.toLowerCase();
   let user = (await User.findOne({ googleId: payload.sub })) ?? (await User.findOne({ email }));
+  let linkedOverPassword = false;
   if (user) {
-    user.googleId ??= payload.sub;
+    if (!user.googleId) {
+      user.googleId = payload.sub;
+      // Google proves this person owns the address, but anyone could have registered it with a password
+      // (sign-up doesn't verify email). Remove that password so a squatter can't keep sharing the account.
+      linkedOverPassword = user.hasPassword;
+      user.hasPassword = false;
+    }
   } else {
-    user = new User({ email, name: payload.name ?? '', googleId: payload.sub, role: roleForEmail(email) });
+    user = new User({ email, name: payload.name ?? '', googleId: payload.sub });
   }
+  if (isAdminEmail(email)) user.role = 'admin';
   if (user.status !== 'active') throw deactivated();
   user.lastLoginAt = new Date();
   await user.save();
+  if (linkedOverPassword) {
+    await User.updateOne({ _id: user._id }, { $unset: { passwordHash: 1 } });
+    await revokeAllSessionsForUser(user._id);
+  }
   return user;
 }

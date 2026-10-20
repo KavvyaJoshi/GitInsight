@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { HttpError } from '../../lib/errors';
 import { User, type Role, type UserDoc } from '../../models/User';
+import { isBlockedDemoAccount } from '../../seed';
 import { verifyAccessToken } from '../../services/tokens';
 
 declare global {
@@ -27,7 +28,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
   }
   // Load the user on every request so deactivation and role changes apply immediately.
   const user = await User.findById(userId);
-  if (!user) return next(invalidToken());
+  if (!user || isBlockedDemoAccount(user.email)) return next(invalidToken());
   if (user.status !== 'active') return next(new HttpError(403, 'ACCOUNT_DEACTIVATED', 'This account has been deactivated.'));
   req.user = user;
   next();

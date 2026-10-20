@@ -5,6 +5,7 @@ import { config } from '../config';
 import { HttpError } from '../lib/errors';
 import { Session } from '../models/Session';
 import { User, type Role, type UserDoc } from '../models/User';
+import { isBlockedDemoAccount } from '../seed';
 
 export interface SessionMeta {
   userAgent?: string;
@@ -79,7 +80,7 @@ export async function rotateSession(refreshToken: string, meta: SessionMeta) {
   }
 
   const user = await User.findById(session.userId);
-  if (!user || user.status !== 'active') {
+  if (!user || user.status !== 'active' || isBlockedDemoAccount(user.email)) {
     await revokeFamily(session.familyId);
     throw new HttpError(403, 'ACCOUNT_DEACTIVATED', 'This account has been deactivated.');
   }

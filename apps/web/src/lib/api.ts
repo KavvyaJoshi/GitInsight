@@ -291,9 +291,16 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   }
   if (res.status === 204) return undefined as T;
 
-  const data = await res.json().catch(() => ({}));
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await res.json().catch(() => ({})) : {};
   if (!res.ok) {
-    throw new ApiError(res.status, data.error?.code ?? 'UNKNOWN', data.error?.message ?? 'Request failed.', data.error);
+    // A non-JSON error means something other than the GitInsight API answered (proxy, host error page, cold start).
+    const fallback = isJson
+      ? 'Request failed.'
+      : res.status >= 502 && res.status <= 504
+        ? 'The GitInsight server is starting up or unreachable. Please try again in a minute.'
+        : `The GitInsight server didn’t respond as expected (status ${res.status}).`;
+    throw new ApiError(res.status, data.error?.code ?? 'UNKNOWN', data.error?.message ?? fallback, data.error);
   }
   return data as T;
 }
