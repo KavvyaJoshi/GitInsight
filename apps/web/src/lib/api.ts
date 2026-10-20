@@ -89,6 +89,29 @@ export interface Branches {
   branches: { name: string; protected: boolean; isDefault: boolean }[];
 }
 
+export interface HealthComponent {
+  key: 'activity' | 'community' | 'maintenance' | 'popularity';
+  label: string;
+  score: number | null;
+  basis: string[];
+  reason?: string;
+}
+export interface Health {
+  score: number | null;
+  grade: string | null;
+  formulaVersion: string;
+  availableComponents: number;
+  explanation: string;
+  components: HealthComponent[];
+}
+
+type AiUnavailable = { available: false; reason: 'NOT_CONFIGURED' | 'INSUFFICIENT_HISTORY'; message: string };
+type AiMeta = { available: true; model: string; generatedAt: string; sources: string[] };
+export type AiSummary = AiUnavailable | (AiMeta & { summary: string; highlights: string[] });
+export type AiTrend =
+  | AiUnavailable
+  | (AiMeta & { headline: string; insight: string; facts: { commitsLast3Months: number; commitsPrevious3Months: number; changePercent: number | null } });
+
 export class ApiError extends Error {
   constructor(
     public status: number,

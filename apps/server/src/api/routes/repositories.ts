@@ -10,6 +10,8 @@ import {
   getLanguages,
   getPullsIssues,
 } from '../../services/analytics.service';
+import { getAiSummary, getAiTrendInsight } from '../../services/ai.service';
+import { getHealthScore } from '../../services/health.service';
 import { getRepositoryById, resolveRepository } from '../../services/repository.service';
 
 // Same GitHub naming rules as the web client (apps/web/src/lib/repoRef.ts); validated here before calling GitHub.
@@ -56,6 +58,9 @@ repositoriesRouter.get('/:id/commits', analytics(getCommitTrend));
 repositoriesRouter.get('/:id/heatmap', analytics(getHeatmap));
 repositoriesRouter.get('/:id/frequency', analytics(getFrequency));
 repositoriesRouter.get('/:id/pulls-issues', analytics(getPullsIssues));
+repositoriesRouter.get('/:id/health-score', analytics(getHealthScore));
+repositoriesRouter.get('/:id/ai-summary', analytics(getAiSummary));
+repositoriesRouter.get('/:id/ai-trend-insight', analytics(getAiTrendInsight));
 repositoriesRouter.get('/:id/branches', (req, res) =>
   sendAnalytics(res, getBranches(idSchema.parse(req.params.id), pageSchema.parse(req.query.page))),
 );

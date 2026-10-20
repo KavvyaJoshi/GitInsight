@@ -34,4 +34,9 @@ export const config = {
   analyticsTtlSec: Number(env.ANALYTICS_TTL_SECONDS ?? 60 * 60),
   // GitHub answers 202 while it computes statistics; wait between retries (none in tests).
   statsRetryDelayMs: env.NODE_ENV === 'test' ? 0 : 1500,
+  // AI insights: the Anthropic SDK reads ANTHROPIC_API_KEY itself; without it AI tabs show a fallback.
+  llmProvider: (env.LLM_PROVIDER || 'anthropic') === 'anthropic' && env.ANTHROPIC_API_KEY ? 'anthropic' : 'none',
+  llmModel: env.LLM_MODEL || 'claude-opus-5-5',
+  // Leaves headroom inside the SRS 10-second target for the GitHub calls that gather inputs.
+  aiTimeoutMs: Number(env.AI_TIMEOUT_MS ?? 9000),
 };

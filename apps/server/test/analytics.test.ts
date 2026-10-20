@@ -104,9 +104,13 @@ describe('analytics endpoints', () => {
   it('returns the top ten contributors ordered by commits, and handles empty repositories', async () => {
     const people = Array.from({ length: 10 }, (_, i) => ({ login: `dev${i}`, avatar_url: '', html_url: '', contributions: i + 1, type: 'User' }));
     fetchMock.mockResolvedValueOnce(json(people));
+    fetchMock.mockResolvedValueOnce(
+      json([people[0]], 200, { link: `<https://api.github.com/repositories/${ID}/contributors?per_page=1&page=57>; rel="last"` }),
+    );
     const res = await request(app).get(`/api/repositories/${ID}/contributors`);
     expect(res.body.data.contributors).toHaveLength(10);
     expect(res.body.data.contributors[0]).toMatchObject({ login: 'dev9', commits: 10 });
+    expect(res.body.data.totalContributors).toBe(57);
 
     await Repository.updateOne({ githubId: ID }, { $set: { analytics: {} } });
     fetchMock.mockResolvedValueOnce(json(null, 204));

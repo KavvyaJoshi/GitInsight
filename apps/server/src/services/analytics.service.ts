@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { HttpError } from '../lib/errors';
 import { githubFetch, lastPageFromLink } from '../integrations/github';
-import { Repository, type RepositoryMetadata } from '../models/Repository';
+import { Repository, RepositoryDailySnapshot, type RepositoryMetadata } from '../models/Repository';
 
 export interface AnalyticsResult<T> {
   status: 'ready';
@@ -28,7 +28,7 @@ const utcDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 // Concurrent requests for the same dataset share one GitHub computation.
 const inFlight = new Map<string, Promise<{ data: unknown; computedAt: string }>>();
 
-async function cachedAnalytics<T>(githubId: number, kind: string, compute: (meta: RepositoryMetadata) => Promise<T>): Promise<AnalyticsResult<T>> {
+export async function cachedAnalytics<T>(githubId: number, kind: string, compute: (meta: RepositoryMetadata) => Promise<T>): Promise<AnalyticsResult<T>> {
   const doc = await Repository.findOne({ githubId }).select(`metadata analytics.${kind}`).lean();
   if (!doc) throw new HttpError(404, 'REPO_NOT_FOUND', 'Search for this repository before requesting its analytics.');
 
@@ -108,7 +108,14 @@ export function getContributors(githubId: number) {
   return cachedAnalytics(githubId, 'contributors', async () => {
     const res = await githubFetch(`/repositories/${githubId}/contributors?per_page=10`, notFound());
     const list = res.status === 204 ? [] : ((await res.json()) as GitHubContributor[]);
+    // With per_page=1 the Link header's last page number is the total contributor count.
+    let totalContributors = list.length;
+    if (list.length === 10) {
+      const countRes = await githubFetch(`/repositories/${githubId}/contributors?per_page=1`, notFound());
+      totalContributors = lastPageFromLink(countRes.headers.get('link')) ?? list.length;
+    }
     return {
+      totalContributors,
       contributors: list
         .map((c) => ({ login: c.login, avatarUrl: c.avatar_url, url: c.html_url, commits: c.contributions, isBot: c.type === 'Bot' }))
         .sort((a, b) => b.commits - a.commits)
@@ -176,9 +183,9 @@ export function buildActivity(weeks: CommitWeek[], now = new Date()) {
   };
 }
 
-type Activity = ReturnType<typeof buildActivity>;
+export type Activity = ReturnType<typeof buildActivity>;
 
-const getActivity = (githubId: number) =>
+export const getActivity = (githubId: number) =>
   cachedAnalytics(githubId, 'activity', async () => buildActivity(await fetchCommitActivity(githubId)));
 
 function pick<T, K extends keyof T>(result: AnalyticsResult<T>, keys: K[]): AnalyticsResult<Pick<T, K>> {
@@ -201,6 +208,116 @@ export function getPullsIssues(githubId: number) {
     const openPullRequests = lastPageFromLink(res.headers.get('link')) ?? firstPage.length;
     // GitHub's open_issues_count includes PRs; subtracting avoids double-counting them as issues.
     return { openPullRequests, openIssues: Math.max(0, meta.openIssues - openPullRequests) };
+  });
+}
+
+// ---- Maintenance signals for the health score (REQ-HEALTH-003) ----
+
+interface GitHubIssue {
+  created_at: string;
+  closed_at: string | null;
+  comments: number;
+  pull_request?: unknown;
+  user: { type: string } | null;
+}
+
+/**
+ * Responsiveness over the 50 most recently opened issues and pull requests. An item counts
+ * as answered once it has a comment or is closed; items under two days old are skipped so
+ * maintainers get a fair chance to respond. Bot-opened items are excluded.
+ */
+export function getMaintenance(githubId: number) {
+  return cachedAnalytics(githubId, 'maintenance', async () => {
+    const res = await githubFetch(`/repositories/${githubId}/issues?state=all&sort=created&direction=desc&per_page=50`, notFound());
+    const items = (await res.json()) as GitHubIssue[];
+    const now = Date.now();
+    const eligible = items.filter((i) => now - Date.parse(i.created_at) >= 2 * DAY_MS && i.user?.type !== 'Bot');
+    const closeDays = eligible
+      .filter((i) => i.closed_at)
+      .map((i) => (Date.parse(i.closed_at!) - Date.parse(i.created_at)) / DAY_MS)
+      .sort((a, b) => a - b);
+    return {
+      sampled: eligible.length,
+      responded: eligible.filter((i) => i.comments > 0 || i.closed_at).length,
+      closed: closeDays.length,
+      medianCloseDays: closeDays.length ? Math.round(closeDays[Math.floor(closeDays.length / 2)] * 10) / 10 : null,
+    };
+  });
+}
+
+// ---- Popularity growth for the health score (REQ-HEALTH-004) ----
+
+const GROWTH_WINDOW_DAYS = 30;
+// GitHub only pages through the first 40,000 stargazers, so newer stars are unreachable beyond that.
+const STARGAZER_PAGE_LIMIT_STARS = 40_000;
+
+/** Stargazers are listed oldest-first, so read backwards from the last page using star timestamps. */
+async function recentStargazers(githubId: number, totalStars: number, cutoff: number): Promise<number> {
+  let gained = 0;
+  for (let page = Math.ceil(totalStars / 100), read = 0; page >= 1 && read < 5; page--, read++) {
+    const res = await githubFetch(`/repositories/${githubId}/stargazers?per_page=100&page=${page}`, notFound(), 'application/vnd.github.star+json');
+    const stars = (await res.json()) as { starred_at: string }[];
+    const recent = stars.filter((s) => Date.parse(s.starred_at) >= cutoff).length;
+    gained += recent;
+    if (stars.length > 0 && recent < stars.length) break;
+  }
+  return gained;
+}
+
+/** Growth estimated from our own daily snapshots, once at least a week of history exists. */
+async function starsFromSnapshots(githubId: number, currentStars: number): Promise<number | null> {
+  const oldest = await RepositoryDailySnapshot.findOne({ githubId }).sort({ date: 1 }).lean();
+  const ageDays = oldest ? (Date.now() - Date.parse(`${oldest.date}T00:00:00Z`)) / DAY_MS : 0;
+  if (!oldest || ageDays < 7) return null;
+  return Math.max(0, Math.round(((currentStars - oldest.stars) * GROWTH_WINDOW_DAYS) / ageDays));
+}
+
+export function getPopularity(githubId: number) {
+  return cachedAnalytics(githubId, 'popularity', async (meta) => {
+    const cutoff = Date.now() - GROWTH_WINDOW_DAYS * DAY_MS;
+
+    // Forks can be listed newest-first directly.
+    const forksRes = await githubFetch(`/repositories/${githubId}/forks?sort=newest&per_page=100`, notFound());
+    const forks = (await forksRes.json()) as { created_at: string }[];
+    const forksGained = forks.filter((f) => Date.parse(f.created_at) >= cutoff).length;
+
+    let starsGained: number | null = null;
+    let starsSource: 'stargazers' | 'snapshots' | null = null;
+    let needsToken = false;
+    if (meta.stars === 0) {
+      starsGained = 0;
+      starsSource = 'stargazers';
+    } else if (meta.stars <= STARGAZER_PAGE_LIMIT_STARS) {
+      try {
+        starsGained = await recentStargazers(githubId, meta.stars, cutoff);
+        starsSource = 'stargazers';
+      } catch (err) {
+        // GitHub only lists stargazers to authenticated callers; fall back to our snapshots.
+        if (!(err instanceof HttpError && err.code === 'GITHUB_AUTH_REQUIRED')) throw err;
+        needsToken = true;
+      }
+    }
+    if (starsGained === null) {
+      starsGained = await starsFromSnapshots(githubId, meta.stars);
+      if (starsGained !== null) starsSource = 'snapshots';
+    }
+
+    return { windowDays: GROWTH_WINDOW_DAYS, starsGained, starsSource, needsToken, forksGained, forksCapped: forksGained === 100 };
+  });
+}
+
+// ---- README for the AI summary ----
+
+export function getReadme(githubId: number) {
+  return cachedAnalytics(githubId, 'readme', async () => {
+    try {
+      const res = await githubFetch(`/repositories/${githubId}/readme`, new HttpError(404, 'NO_README', 'No README'));
+      const body = (await res.json()) as { content: string; encoding: string };
+      return { text: body.encoding === 'base64' ? Buffer.from(body.content, 'base64').toString('utf8') : body.content };
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'NO_README') return { text: '' };
+      throw err;
+    }
   });
 }
 

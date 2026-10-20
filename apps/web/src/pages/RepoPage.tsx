@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowUpRight, CloudOff, RotateCw, SearchX, Sparkles, Timer } from 'lucide-react';
+import { ArrowUpRight, CloudOff, RotateCw, SearchX, Timer } from 'lucide-react';
 import {
   BranchesView,
   CommitsView,
@@ -10,10 +10,12 @@ import {
   LanguagesView,
   PullsIssuesView,
 } from '../components/analytics/Views';
+import { AiSummaryView, AiTrendView, HealthView, ScoreRing, healthPath } from '../components/analytics/Insights';
+import { useAnalytics } from '../lib/useAnalytics';
 import { OverviewCard, OverviewSkeleton } from '../components/repo/OverviewCard';
 import { RepoSearch } from '../components/RepoSearch';
 import { Alert, Button, buttonClass } from '../components/ui';
-import { api, ApiError, type RepositoryResponse } from '../lib/api';
+import { api, ApiError, type Health, type RepositoryResponse } from '../lib/api';
 import { formatTime, relativeTime } from '../lib/format';
 import { parseRepoRef, type RepoRef } from '../lib/repoRef';
 
@@ -31,7 +33,7 @@ const TABS = [
   { slug: 'ai-trend', label: 'AI Trend' },
 ];
 
-const ANALYTICS_VIEWS: Record<string, (props: { repoId: number }) => ReactNode> = {
+const ANALYTICS_VIEWS: Record<string, (props: { repoId: number; repoUrl: string }) => ReactNode> = {
   languages: LanguagesView,
   contributors: ContributorsView,
   commits: CommitsView,
@@ -39,7 +41,34 @@ const ANALYTICS_VIEWS: Record<string, (props: { repoId: number }) => ReactNode> 
   heatmap: HeatmapView,
   frequency: FrequencyView,
   branches: BranchesView,
+  health: HealthView,
+  'ai-summary': AiSummaryView,
+  'ai-trend': AiTrendView,
 };
+
+/** Prominent health score in the header (SRS 3.1); opens the breakdown. */
+function HealthBadge({ repoId, onOpen }: { repoId: number; onOpen: () => void }) {
+  const { state } = useAnalytics<Health>(healthPath(repoId));
+  const health = state.status === 'ready' ? state.result.data : null;
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-2.5 rounded-lg border border-zinc-200 py-1.5 pr-3 pl-1.5 text-left transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+      aria-label={health?.score != null ? `Health score ${health.score} out of 100, view breakdown` : 'View health score'}
+    >
+      <span className="relative">
+        <ScoreRing score={health?.score ?? null} size={36} stroke={4} />
+        <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-medium tabular-nums">
+          {state.status === 'ready' ? (health?.score ?? '—') : <span className="size-1.5 animate-pulse rounded-full bg-zinc-400" />}
+        </span>
+      </span>
+      <span className="leading-tight">
+        <span className="block text-xs text-zinc-500">Health</span>
+        <span className="block text-sm font-medium">{state.status === 'ready' ? (health?.grade ?? 'Not available') : 'Calculating…'}</span>
+      </span>
+    </button>
+  );
+}
 
 type LoadState = { status: 'loading' } | { status: 'error'; error: unknown } | { status: 'ready'; data: RepositoryResponse };
 
@@ -105,18 +134,6 @@ function ErrorState({ error, owner, repo, onRetry }: { error: unknown; owner: st
   );
 }
 
-function PendingTab({ tab }: { tab: string }) {
-  return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-zinc-300 px-6 py-16 text-center dark:border-zinc-700">
-      <Sparkles className="size-6 text-zinc-400" aria-hidden />
-      <h2 className="mt-4 font-medium">{tab} isn’t available yet</h2>
-      <p className="mt-1.5 max-w-sm text-sm text-zinc-500">
-        The health score and AI insights are built on top of the analytics in the other tabs, and arrive next.
-      </p>
-    </div>
-  );
-}
-
 export default function RepoPage() {
   const params = useParams();
   const navigate = useNavigate();
@@ -164,9 +181,12 @@ export default function RepoPage() {
             <h1 className="truncate font-mono text-2xl font-medium tracking-tight sm:text-3xl">{meta?.name ?? repo}</h1>
           </div>
         </div>
-        <a href={meta?.url ?? `https://github.com/${owner}/${repo}`} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'sm')}>
-          View on GitHub <ArrowUpRight className="size-3.5" />
-        </a>
+        <div className="flex items-center gap-2">
+          {meta && <HealthBadge repoId={meta.id} onOpen={() => setTab('health')} />}
+          <a href={meta?.url ?? `https://github.com/${owner}/${repo}`} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'sm')}>
+            View on GitHub <ArrowUpRight className="size-3.5" />
+          </a>
+        </div>
       </div>
 
       {state.status === 'error' ? (
@@ -200,10 +220,9 @@ export default function RepoPage() {
               </Alert>
             )}
             {(() => {
-              if (!meta) return tab.slug === 'overview' || ANALYTICS_VIEWS[tab.slug] ? <OverviewSkeleton /> : <PendingTab tab={tab.label} />;
-              if (tab.slug === 'overview') return <OverviewCard repo={meta} />;
+              if (!meta) return <OverviewSkeleton />;
               const View = ANALYTICS_VIEWS[tab.slug];
-              return View ? <View key={meta.id} repoId={meta.id} /> : <PendingTab tab={tab.label} />;
+              return View ? <View key={meta.id} repoId={meta.id} repoUrl={meta.url} /> : <OverviewCard repo={meta} />;
             })()}
             {data && tab.slug === 'overview' && (
               <p className="text-xs text-zinc-400">

@@ -64,9 +64,9 @@ export async function githubGet<T>(path: string, notFound: HttpError): Promise<T
  * GET a GitHub REST path, translating failures into user-facing errors. Successful
  * responses (including 202 "still computing" and 204 "no content") are returned as-is.
  */
-export async function githubFetch(path: string, notFound: HttpError): Promise<Response> {
+export async function githubFetch(path: string, notFound: HttpError, accept = 'application/vnd.github+json'): Promise<Response> {
   const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
+    Accept: accept,
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'GitInsight',
   };
@@ -82,6 +82,7 @@ export async function githubFetch(path: string, notFound: HttpError): Promise<Re
   const resetAt = recordRateLimit(res);
   if (res.ok) return res;
   if (res.status === 404) throw notFound;
+  if (res.status === 401) throw new HttpError(502, 'GITHUB_AUTH_REQUIRED', 'GitHub requires an API token for this data.');
   if (res.status === 429 || (res.status === 403 && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after')))) {
     throw new HttpError(429, 'RATE_LIMITED', 'GitHub’s API rate limit has been reached. Please try again later.', { resetAt });
   }
