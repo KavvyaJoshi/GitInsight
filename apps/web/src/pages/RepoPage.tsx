@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Timer } from 'lucide-react';
+import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Sparkles, Timer, TreeDeciduous, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { BookmarkButton } from '../components/BookmarkButton';
 import { ExportMenu } from '../components/ExportMenu';
@@ -23,18 +23,20 @@ import { api, ApiError, type Health, type RepositoryResponse } from '../lib/api'
 import { formatTime, relativeTime } from '../lib/format';
 import { parseRepoRef, type RepoRef } from '../lib/repoRef';
 
-const TABS = [
+// The headline features (AI insights and the branch tree) sit right after Overview, which stays
+// the default tab as the SRS requires (REQ-DASH-001); the detailed analytics follow a divider.
+const TABS: { slug: string; label: string; featured?: LucideIcon }[] = [
   { slug: 'overview', label: 'Overview' },
+  { slug: 'ai-summary', label: 'AI Summary', featured: Sparkles },
+  { slug: 'ai-trend', label: 'AI Trend', featured: TrendingUp },
+  { slug: 'branches', label: 'Branch tree', featured: TreeDeciduous },
+  { slug: 'health', label: 'Health' },
   { slug: 'languages', label: 'Languages' },
   { slug: 'contributors', label: 'Contributors' },
   { slug: 'commits', label: 'Commits' },
   { slug: 'pulls-issues', label: 'PRs & Issues' },
   { slug: 'heatmap', label: 'Heatmap' },
   { slug: 'frequency', label: 'Frequency' },
-  { slug: 'branches', label: 'Branches' },
-  { slug: 'health', label: 'Health' },
-  { slug: 'ai-summary', label: 'AI Summary' },
-  { slug: 'ai-trend', label: 'AI Trend' },
 ];
 
 const ANALYTICS_VIEWS: Record<string, (props: { repoId: number; repoUrl: string }) => ReactNode> = {
@@ -210,21 +212,29 @@ export default function RepoPage() {
         <>
           <div className="mt-6 -mx-4 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800" role="tablist">
             <div className="flex gap-1">
-              {TABS.map((t) => (
-                <button
-                  key={t.slug}
-                  role="tab"
-                  aria-selected={t === tab}
-                  onClick={() => setTab(t.slug)}
-                  className={`-mb-px border-b-2 px-3 py-2.5 text-sm whitespace-nowrap transition-colors ${
-                    t === tab
-                      ? 'border-zinc-900 font-medium text-zinc-900 dark:border-zinc-100 dark:text-zinc-100'
-                      : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+              {TABS.map((t, i) => {
+                const Icon = t.featured;
+                const active = t === tab;
+                return (
+                  <div key={t.slug} className="flex items-center">
+                    {/* Divider between the headline features and the detailed analytics. */}
+                    {i > 0 && TABS[i - 1].featured && !t.featured && <span className="mx-1.5 h-4 w-px bg-zinc-200 dark:bg-zinc-800" aria-hidden />}
+                    <button
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setTab(t.slug)}
+                      className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm whitespace-nowrap transition-colors ${
+                        active
+                          ? `font-medium ${Icon ? 'border-violet-600 text-violet-700 dark:border-violet-400 dark:text-violet-300' : 'border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100'}`
+                          : `border-transparent hover:text-zinc-800 dark:hover:text-zinc-200 ${Icon ? 'font-medium text-zinc-700 dark:text-zinc-300' : 'text-zinc-500'}`
+                      }`}
+                    >
+                      {Icon && <Icon className={`size-3.5 ${active ? '' : 'text-violet-500'}`} aria-hidden />}
+                      {t.label}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

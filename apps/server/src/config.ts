@@ -49,8 +49,8 @@ export const config = {
   llmModel: env.LLM_MODEL || DEFAULT_MODELS[llmProvider()],
   geminiApiKey: env.GEMINI_API_KEY ?? '',
   // Leaves headroom inside the SRS 10-second target for the GitHub calls that gather inputs.
-  // Free-tier Gemini queues requests (5–12 s observed), so it gets more room; results are cached after the first call.
-  aiTimeoutMs: Number(env.AI_TIMEOUT_MS || (llmProvider() === 'gemini' ? 20_000 : 9000)),
+  // Free-tier Gemini queues requests (5–18 s observed), so it gets more room; results are cached after the first call.
+  aiTimeoutMs: Number(env.AI_TIMEOUT_MS || (llmProvider() === 'gemini' ? 25_000 : 9000)),
   alertIntervalMinutes: Number(env.ALERT_INTERVAL_MINUTES ?? 60),
   // In development the API process also runs the background jobs, since the in-memory database can't be shared.
   runWorkerInApi: (env.RUN_WORKER_IN_API ?? (isProd ? 'false' : 'true')) === 'true',

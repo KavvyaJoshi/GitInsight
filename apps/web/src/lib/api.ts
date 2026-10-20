@@ -152,7 +152,9 @@ export interface Health {
 
 type AiUnavailable = { available: false; reason: 'NOT_CONFIGURED' | 'INSUFFICIENT_HISTORY'; message: string };
 type AiMeta = { available: true; model: string; generatedAt: string; sources: string[] };
-export type AiSummary = AiUnavailable | (AiMeta & { summary: string; highlights: string[] });
+export type AiSummary =
+  | AiUnavailable
+  | (AiMeta & { whatItIs: string; whatsHappening: string; currentWork: string[]; terms: { term: string; meaning: string }[] });
 export type AiTrend =
   | AiUnavailable
   | (AiMeta & { headline: string; insight: string; facts: { commitsLast3Months: number; commitsPrevious3Months: number; changePercent: number | null } });

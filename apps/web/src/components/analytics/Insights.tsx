@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Info, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
+import { Activity, BookOpen, Hammer, Info, Lightbulb, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import type { AiSummary, AiTrend, Health } from '../../lib/api';
 import { exactNumber, relativeTime } from '../../lib/format';
 import { useAnalytics } from '../../lib/useAnalytics';
@@ -128,12 +128,24 @@ function AiUnavailableNotice({ message }: { message: string }) {
   );
 }
 
+function SummarySection({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-2 sm:grid-cols-[11rem_1fr] sm:gap-6">
+      <h3 className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+        {icon}
+        {title}
+      </h3>
+      <div>{children}</div>
+    </section>
+  );
+}
+
 export function AiSummaryView({ repoId }: { repoId: number }) {
   const { state, retry } = useAnalytics<AiSummary>(`/repositories/${repoId}/ai-summary`);
   return (
     <AnalyticsPanel
       title="AI summary"
-      description="A short executive summary written from the description, README and topics."
+      description="This project in plain English: what it is, what’s happening, and what the team is working on."
       state={state}
       onRetry={retry}
       chart={(d) =>
@@ -141,14 +153,43 @@ export function AiSummaryView({ repoId }: { repoId: number }) {
           <AiUnavailableNotice message={d.message} />
         ) : (
           <AiFrame model={d.model} generatedAt={d.generatedAt} sources={d.sources}>
-            <p className="max-w-3xl text-[17px] leading-relaxed text-pretty">{d.summary}</p>
-            <ul className="grid gap-3 sm:grid-cols-3">
-              {d.highlights.map((h) => (
-                <li key={h} className="rounded-lg border border-zinc-200 px-4 py-3 text-sm dark:border-zinc-800">
-                  {h}
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-7">
+              <SummarySection icon={<BookOpen className="size-4" />} title="What it is">
+                <p className="max-w-3xl text-[17px] leading-relaxed text-pretty">{d.whatItIs}</p>
+              </SummarySection>
+
+              <SummarySection icon={<Activity className="size-4" />} title="What’s happening">
+                <p className="max-w-3xl leading-relaxed text-pretty text-zinc-700 dark:text-zinc-300">{d.whatsHappening}</p>
+              </SummarySection>
+
+              <SummarySection icon={<Hammer className="size-4" />} title="Working on now">
+                {d.currentWork.length ? (
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {d.currentWork.map((item) => (
+                      <li key={item} className="flex gap-2.5 rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm dark:border-zinc-800">
+                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-(--chart-accent)" aria-hidden />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-zinc-500">No recent work to report. The project looks quiet at the moment.</p>
+                )}
+              </SummarySection>
+
+              {d.terms.length > 0 && (
+                <SummarySection icon={<Lightbulb className="size-4" />} title="Words to know">
+                  <dl className="space-y-2 text-sm">
+                    {d.terms.map((t) => (
+                      <div key={t.term} className="flex flex-wrap gap-x-2">
+                        <dt className="font-medium">{t.term}</dt>
+                        <dd className="text-zinc-600 dark:text-zinc-400">{t.meaning}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </SummarySection>
+              )}
+            </div>
           </AiFrame>
         )
       }

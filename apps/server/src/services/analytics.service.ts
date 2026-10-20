@@ -306,6 +306,52 @@ export function getPopularity(githubId: number) {
   });
 }
 
+// ---- Recent work for the AI summary: what the team is doing right now ----
+
+interface GitHubCommit {
+  commit: { message: string; author: { name?: string; date?: string } | null };
+  author: { login: string; type: string } | null;
+}
+
+const settledJson = async <T>(work: Promise<Response>, fallback: T): Promise<T> => {
+  try {
+    const body = await (await work).json();
+    return (Array.isArray(fallback) ? (Array.isArray(body) ? body : fallback) : body) as T;
+  } catch {
+    // An empty repository answers 409 for commits; a repository without releases answers 404.
+    return fallback;
+  }
+};
+
+export function getRecentWork(githubId: number) {
+  return cachedAnalytics(githubId, 'recentWork', async () => {
+    const [commits, pulls, release] = await Promise.all([
+      settledJson<GitHubCommit[]>(githubFetch(`/repositories/${githubId}/commits?per_page=25`, notFound()), []),
+      settledJson<{ title: string; updated_at: string; draft: boolean }[]>(
+        githubFetch(`/repositories/${githubId}/pulls?state=open&sort=updated&direction=desc&per_page=10`, notFound()),
+        [],
+      ),
+      settledJson<{ tag_name?: string; name?: string; published_at?: string } | null>(
+        githubFetch(`/repositories/${githubId}/releases/latest`, new HttpError(404, 'NO_RELEASE', 'No release')),
+        null,
+      ),
+    ]);
+    return {
+      // Merge commits repeat what the pull request titles already say.
+      commits: commits
+        .filter((c) => !/^Merge (pull request|branch|remote-tracking)/i.test(c.commit.message))
+        .slice(0, 15)
+        .map((c) => ({
+          message: c.commit.message.split('\n')[0].slice(0, 140),
+          date: c.commit.author?.date?.slice(0, 10) ?? null,
+          byBot: c.author?.type === 'Bot',
+        })),
+      openPullRequests: pulls.map((p) => ({ title: p.title.slice(0, 140), updated: p.updated_at.slice(0, 10), draft: p.draft })),
+      latestRelease: release?.tag_name ? { tag: release.tag_name, name: release.name ?? null, published: release.published_at?.slice(0, 10) ?? null } : null,
+    };
+  });
+}
+
 // ---- README for the AI summary ----
 
 export function getReadme(githubId: number) {

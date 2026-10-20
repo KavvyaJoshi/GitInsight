@@ -5,9 +5,10 @@ import { getLlmProvider } from '../integrations/llm';
 import { AIInsight } from '../models/AIInsight';
 import { track } from './activity.service';
 import { Repository, type RepositoryMetadata } from '../models/Repository';
-import { getActivity, getContributors, getReadme } from './analytics.service';
+import { getActivity, getContributors, getReadme, getRecentWork } from './analytics.service';
 
-const PROMPT_VERSION = '1';
+// Bump when prompts or output shapes change, so cached results are regenerated.
+const PROMPT_VERSION = '3';
 // README text beyond this is left out; the model is told it sees the opening section only.
 const README_CHAR_LIMIT = 8000;
 
@@ -28,13 +29,25 @@ export const SHARED_RULES = `Rules:
 - Write plain text without markdown, in a neutral, factual tone for a developer skimming a dashboard.`;
 
 const summarySchema = z.object({
-  summary: z.string().describe('Two or three sentences: what the project is, who it is for, and what makes it notable.'),
-  highlights: z.array(z.string()).describe('Exactly three short highlights (under 15 words each) about capabilities or characteristics.'),
+  whatItIs: z.string().describe('Two or three short sentences in plain English: what this project is, what problem it solves, and who uses it.'),
+  whatsHappening: z
+    .string()
+    .describe('One or two sentences on the state of the project right now (busy, steady, slowing down or quiet), backed by the evidence given: recent commits, latest release, last update.'),
+  currentWork: z
+    .array(z.string())
+    .describe(
+      'Up to four short points (under 15 words each) on what the team is working on now, inferred from the recent commits and open pull requests. Describe each by what it means for people using the project (for example "Making pages load faster"), not by internal code names. Empty when there is no recent activity.',
+    ),
+  terms: z
+    .array(z.object({ term: z.string(), meaning: z.string().describe('One plain sentence a non-programmer understands.') }))
+    .describe('Up to three technical terms used above that a non-programmer may not know. Empty if none were needed.'),
 });
 
 const trendSchema = z.object({
-  headline: z.string().describe('A headline under 10 words describing the overall direction of activity.'),
-  insight: z.string().describe('Two or three sentences explaining the trend in commits and contributor participation, citing the numbers given.'),
+  headline: z.string().describe('A plain-English headline under 10 words describing the overall direction of activity.'),
+  insight: z
+    .string()
+    .describe('Two or three short sentences explaining, in everyday words, how commits and contributor participation are changing and what that means, citing the numbers given.'),
 });
 
 /** Strip noise (HTML comments, images, badges) that carries no meaning for a summary. */
@@ -101,31 +114,58 @@ export async function getAiSummary(githubId: number) {
   const provider = getLlmProvider();
   if (!provider) return ready<Unavailable>(NOT_CONFIGURED);
 
-  const readme = cleanReadme((await getReadme(githubId)).data.text);
-  const inputs = { name: meta.fullName, description: meta.description, topics: meta.topics, language: meta.language, readme: readme.text };
+  const [readmeResult, recent, activity] = await Promise.all([
+    getReadme(githubId),
+    getRecentWork(githubId).then((r) => r.data).catch(() => null),
+    // Activity numbers are a bonus; never hold the summary back while GitHub computes them.
+    getActivity(githubId).then((r) => r.data).catch(() => null),
+  ]);
+  const readme = cleanReadme(readmeResult.data.text);
+  const sum = (months: { commits: number }[]) => months.reduce((s, m) => s + m.commits, 0);
+  const facts = {
+    repository: meta.fullName,
+    primaryLanguage: meta.language,
+    topics: meta.topics,
+    stars: meta.stars,
+    createdYear: meta.createdAt?.slice(0, 4) ?? null,
+    lastUpdated: meta.pushedAt?.slice(0, 10) ?? null,
+    archived: meta.archived,
+    commitsLast3Months: activity ? sum(activity.monthly.slice(-3)) : null,
+    commitsPrevious3Months: activity ? sum(activity.monthly.slice(-6, -3)) : null,
+    latestRelease: recent?.latestRelease ?? null,
+  };
+  const inputs = { facts, description: meta.description, readme: readme.text, commits: recent?.commits, pulls: recent?.openPullRequests };
 
   const result = await generateOnce(githubId, 'summary', inputs, () =>
     provider.generate({
       schema: summarySchema,
-      system: `You write executive summaries of GitHub repositories for an analytics dashboard.\n${SHARED_RULES}`,
+      system: [
+        'You explain GitHub repositories to people who may not be programmers: students, managers and curious readers.',
+        'Write in plain, friendly English with short sentences and everyday words.',
+        'Use a technical term only when it is genuinely needed, and then add it to "terms" with a simple meaning.',
+        'Describe what the project is, what is happening with it right now, and what the team is currently working on.',
+        SHARED_RULES.replace('<readme> and <description> tags', '<readme>, <description>, <recent_commits> and <open_pull_requests> tags'),
+      ].join('\n'),
       prompt: [
-        `Repository: ${meta.fullName}`,
-        `Primary language: ${meta.language ?? 'not specified'}`,
-        `Topics: ${meta.topics.length ? meta.topics.join(', ') : 'none'}`,
+        `Facts (JSON): ${JSON.stringify(facts)}`,
         `<description>${meta.description ?? 'none'}</description>`,
+        `<recent_commits>\n${recent?.commits.map((c) => `${c.date ?? ''} ${c.byBot ? '[bot] ' : ''}${c.message}`).join('\n') || 'none'}\n</recent_commits>`,
+        `<open_pull_requests>\n${recent?.openPullRequests.map((p) => `${p.updated}${p.draft ? ' [draft]' : ''} ${p.title}`).join('\n') || 'none'}\n</open_pull_requests>`,
         `<readme${readme.truncated ? ' note="opening section only"' : ''}>${readme.text || 'No README.'}</readme>`,
-        'Summarise this repository.',
+        'Explain this repository for a non-technical reader.',
       ].join('\n'),
     }),
   );
 
   return ready({
     available: true as const,
-    ...result.content,
-    highlights: result.content.highlights.slice(0, 3),
+    whatItIs: result.content.whatItIs,
+    whatsHappening: result.content.whatsHappening,
+    currentWork: result.content.currentWork.slice(0, 4),
+    terms: result.content.terms.slice(0, 3),
     model: result.model,
     generatedAt: result.generatedAt,
-    sources: ['description', 'README', 'topics', 'primary language'],
+    sources: ['description', 'README', 'recent commits', 'open pull requests', 'latest release'],
   });
 }
 
@@ -170,7 +210,11 @@ export async function getAiTrendInsight(githubId: number) {
   const result = await generateOnce(githubId, 'trend', facts, () =>
     provider.generate({
       schema: trendSchema,
-      system: `You explain activity trends in GitHub repositories for an analytics dashboard.\n${SHARED_RULES}`,
+      system: [
+        'You explain activity trends in GitHub repositories to readers who may not be programmers.',
+        'Use plain, friendly English and short sentences; say what the numbers mean for the project, not just what they are.',
+        SHARED_RULES,
+      ].join('\n'),
       prompt: `Facts (JSON):\n${JSON.stringify(facts, null, 2)}\n\nDescribe the recent trend in development activity and contributor participation.`,
     }),
   );

@@ -4,12 +4,16 @@ import { RepoSearch } from '../components/RepoSearch';
 import { buttonClass } from '../components/ui';
 
 const SECTIONS: { title: string; body: string; tabs: string[] }[] = [
-  { title: 'Overview', body: 'Stars, forks, watchers, open issues, licence and size on a single card.', tabs: ['Overview'] },
-  { title: 'Activity', body: 'Monthly commit trend, a twelve-month heatmap and which weekdays the work happens.', tabs: ['Commits', 'Heatmap', 'Frequency'] },
-  { title: 'People and code', body: 'The top ten contributors, the language mix and every branch.', tabs: ['Contributors', 'Languages', 'Branches'] },
-  { title: 'Pull requests and issues', body: 'Open pull requests and open issues, counted separately so neither inflates the other.', tabs: ['PRs & Issues'] },
+  {
+    title: 'AI summary in plain English',
+    body: 'What the project is, what’s happening with it and what the team is working on right now, written so anyone can follow.',
+    tabs: ['AI Summary', 'AI Trend'],
+  },
+  { title: 'Branch tree', body: 'Every branch grown as a living tree: the trunk is the main version and each leaf is someone trying an idea.', tabs: ['Branch tree'] },
   { title: 'Health score', body: 'One 0–100 score built from activity, community, maintenance and popularity, with the breakdown shown.', tabs: ['Health'] },
-  { title: 'AI insights', body: 'A short executive summary and trend note in plain language, always labelled as AI-generated.', tabs: ['AI Summary', 'AI Trend'] },
+  { title: 'Activity', body: 'Monthly commit trend, a twelve-month heatmap and which weekdays the work happens.', tabs: ['Commits', 'Heatmap', 'Frequency'] },
+  { title: 'People and code', body: 'The top ten contributors and the language mix, plus stars, forks and licence on one card.', tabs: ['Contributors', 'Languages', 'Overview'] },
+  { title: 'Pull requests and issues', body: 'Open pull requests and open issues, counted separately so neither inflates the other.', tabs: ['PRs & Issues'] },
 ];
 
 export default function HomePage() {
