@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HttpError } from '../lib/errors';
 import { getLlmProvider } from '../integrations/llm';
 import { AIInsight } from '../models/AIInsight';
+import { track } from './activity.service';
 import { Repository, type RepositoryMetadata } from '../models/Repository';
 import { getActivity, getContributors, getReadme } from './analytics.service';
 
@@ -66,6 +67,7 @@ export async function generateOnce<T>(githubId: number, type: 'summary' | 'trend
   const key = `${githubId}:${type}:${inputHash}`;
   let job = inFlight.get(key) as Promise<T> | undefined;
   if (!job) {
+    track('llm.calls');
     job = run().finally(() => inFlight.delete(key));
     inFlight.set(key, job);
   }
@@ -73,6 +75,7 @@ export async function generateOnce<T>(githubId: number, type: 'summary' | 'trend
   try {
     content = await job;
   } catch (err) {
+    track('llm.failures');
     console.error(`AI ${type} generation failed for ${githubId}:`, err instanceof Error ? err.message : err);
     throw aiUnavailable();
   }

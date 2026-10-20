@@ -1,6 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { fullNameSchema } from '../../lib/repoRef';
+import {
+  clearNotifications,
+  createRule,
+  deleteRule,
+  listNotifications,
+  listRules,
+  markRead,
+  unreadCount,
+  updateRule,
+} from '../../services/alerts.service';
 import { compareRepositories, getComparisonNarrative } from '../../services/comparison.service';
 import {
   addBookmark,
@@ -45,7 +55,44 @@ const preferencesSchema = z
 
 /** Bookmarks, collections, history, comparison and preferences: Registered Users only (REQ-PERS-008, BR-002). */
 export const personalRouter = Router();
-personalRouter.use(['/collections', '/bookmarks', '/history', '/preferences', '/comparisons', '/comparison-sets'], requireAuth);
+personalRouter.use(['/collections', '/bookmarks', '/history', '/preferences', '/comparisons', '/comparison-sets', '/alerts', '/notifications'], requireAuth);
+
+// ---- Alerts (REQ-PERS-004) and notifications (REQ-PERS-006) ----
+
+const alertSchema = z.discriminatedUnion('type', [
+  z.object({ githubId, type: z.literal('star_threshold'), threshold: z.coerce.number().int().min(1, 'Choose at least 1 star.').max(10_000_000) }),
+  z.object({ githubId, type: z.literal('new_release') }),
+]);
+
+personalRouter.get('/alerts', async (req, res) => {
+  res.json({ alerts: await listRules(req.user!._id) });
+});
+personalRouter.post('/alerts', async (req, res) => {
+  res.status(201).json({ alert: await createRule(req.user!._id, alertSchema.parse(req.body)) });
+});
+personalRouter.patch('/alerts/:id', async (req, res) => {
+  const changes = z.object({ active: z.boolean().optional(), threshold: z.coerce.number().int().min(1).max(10_000_000).optional() }).parse(req.body);
+  res.json({ alert: await updateRule(req.user!._id, req.params.id, changes) });
+});
+personalRouter.delete('/alerts/:id', async (req, res) => {
+  await deleteRule(req.user!._id, req.params.id);
+  res.status(204).end();
+});
+
+personalRouter.get('/notifications', async (req, res) => {
+  res.json(await listNotifications(req.user!._id));
+});
+personalRouter.get('/notifications/unread-count', async (req, res) => {
+  res.json({ unread: await unreadCount(req.user!._id) });
+});
+personalRouter.post('/notifications/read', async (req, res) => {
+  await markRead(req.user!._id, z.object({ id: z.string().optional() }).parse(req.body ?? {}).id);
+  res.status(204).end();
+});
+personalRouter.delete('/notifications', async (req, res) => {
+  await clearNotifications(req.user!._id);
+  res.status(204).end();
+});
 
 personalRouter.get('/collections', async (req, res) => {
   res.json({ collections: await listCollections(req.user!._id) });

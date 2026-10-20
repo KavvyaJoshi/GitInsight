@@ -4,6 +4,7 @@ import { Layers, Library, LogOut, Moon, Shield, Sun, UserRound } from 'lucide-re
 import { useAuth } from '../auth/AuthContext';
 import { THEME_EVENT, isDark, setTheme } from '../lib/theme';
 import { Logo } from './Logo';
+import { NotificationBell } from './NotificationBell';
 import { RepoSearch } from './RepoSearch';
 import { useToast } from './Toast';
 import { Avatar, RoleBadge, buttonClass } from './ui';
@@ -161,7 +162,10 @@ export function Navbar() {
           {loading ? (
             <div className="size-8 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-800" />
           ) : user ? (
-            <UserMenu />
+            <>
+              <NotificationBell />
+              <UserMenu />
+            </>
           ) : (
             <>
               <Link to="/login" state={{ from }} className={buttonClass('ghost', 'sm')}>

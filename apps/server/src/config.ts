@@ -39,4 +39,7 @@ export const config = {
   llmModel: env.LLM_MODEL || 'claude-opus-5-5',
   // Leaves headroom inside the SRS 10-second target for the GitHub calls that gather inputs.
   aiTimeoutMs: Number(env.AI_TIMEOUT_MS ?? 9000),
+  alertIntervalMinutes: Number(env.ALERT_INTERVAL_MINUTES ?? 60),
+  // In development the API process also runs the background jobs, since the in-memory database can't be shared.
+  runWorkerInApi: (env.RUN_WORKER_IN_API ?? (isProd ? 'false' : 'true')) === 'true',
 };

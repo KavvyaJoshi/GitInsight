@@ -157,6 +157,48 @@ export type AiTrend =
   | AiUnavailable
   | (AiMeta & { headline: string; insight: string; facts: { commitsLast3Months: number; commitsPrevious3Months: number; changePercent: number | null } });
 
+export interface AlertItem {
+  id: string;
+  githubId: number;
+  fullName: string;
+  type: 'star_threshold' | 'new_release';
+  threshold: number | null;
+  active: boolean;
+  triggered: boolean;
+  lastStars: number | null;
+  lastReleaseTag: string | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+export interface AdminUsage {
+  platform: { users: number; admins: number; deactivated: number; activeThisWeek: number; repositories: number; bookmarks: number; activeAlerts: number; notifications: number };
+  today: { apiRequests: number; searches: number; logins: number; exports: number };
+  github: { authenticated: boolean; limit: number | null; remaining: number | null; resetAt: string | null; callsToday: number; errorsToday: number };
+  llm: { configured: boolean; model: string | null; callsToday: number; failuresToday: number };
+  alertIntervalMinutes: number;
+  series: ({ date: string } & Record<string, number>)[];
+}
+export interface ActivityEntry {
+  id: string;
+  action: string;
+  actorEmail: string | null;
+  targetType: string | null;
+  targetLabel: string | null;
+  details: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -200,6 +242,32 @@ export function refreshSession(): Promise<AuthResponse | null> {
     }
   })();
   return refreshInFlight;
+}
+
+/** POST to an endpoint that returns a file and save it with the server-provided name. */
+export async function downloadFile(path: string, body: unknown, retry = true): Promise<void> {
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401 && retry && accessToken) {
+    const session = await refreshSession();
+    sessionListener?.(session?.user ?? null);
+    if (session) return downloadFile(path, body, false);
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data.error?.code ?? 'UNKNOWN', data.error?.message ?? 'Download failed.', data.error);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'gitinsight-report';
+  const url = URL.createObjectURL(await res.blob());
+  const link = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}, retry = true): Promise<T> {

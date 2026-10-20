@@ -154,7 +154,44 @@
   animation: card-shuffle 1.1s ease-in-out infinite;
 }
 
+/* Notifications: the bell rings when something new arrives. */
+@keyframes bell-ring {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  15%,
+  45% {
+    transform: rotate(16deg);
+  }
+  30%,
+  60% {
+    transform: rotate(-14deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+}
+.bell-ring {
+  transform-origin: top center;
+  animation: bell-ring 0.9s ease-in-out;
+}
+/* Alerts: the rocket bobs gently on its way to the star goal. */
+@keyframes rocket-bob {
+  50% {
+    transform: translate(-50%, -3px) rotate(45deg);
+  }
+}
+.rocket-bob {
+  transform: translate(-50%, 0) rotate(45deg);
+  animation: rocket-bob 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .bell-ring,
+  .rocket-bob {
+    animation: none;
+  }
   .card-deal,
   .holo,
   .card-shuffle {

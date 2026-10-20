@@ -12,6 +12,9 @@ import {
 } from '../../services/analytics.service';
 import { getAiSummary, getAiTrendInsight } from '../../services/ai.service';
 import { getHealthScore } from '../../services/health.service';
+import { logActivity, track } from '../../services/activity.service';
+import { EXPORT_FORMATS, exportReport } from '../../services/export.service';
+import { requireAuth } from '../middleware/auth';
 import { recordSearch } from '../../services/personal.service';
 import { getRepositoryById, resolveRepository } from '../../services/repository.service';
 import { ownerSchema, repoSchema } from '../../lib/repoRef';
@@ -38,6 +41,7 @@ export const repositoriesRouter = Router();
 repositoriesRouter.get('/search', async (req, res) => {
   const { owner, repo } = searchSchema.parse(req.query);
   const result = await resolveRepository(owner, repo);
+  track('repo.searches');
   // Registered users get a persistent search history (REQ-PERS-002); guests do not.
   if (req.user) await recordSearch(req.user._id, result.repository);
   res.json(result);
@@ -56,6 +60,16 @@ repositoriesRouter.get('/:id/pulls-issues', analytics(getPullsIssues));
 repositoriesRouter.get('/:id/health-score', analytics(getHealthScore));
 repositoriesRouter.get('/:id/ai-summary', analytics(getAiSummary));
 repositoriesRouter.get('/:id/ai-trend-insight', analytics(getAiTrendInsight));
+// Report export is for Registered Users only (REQ-PERS-003, REQ-PERS-008).
+repositoriesRouter.post('/:id/export', requireAuth, async (req, res) => {
+  const id = idSchema.parse(req.params.id);
+  const { format } = z.object({ format: z.enum(EXPORT_FORMATS) }).parse(req.body);
+  const file = await exportReport(id, format);
+  track('exports');
+  await logActivity({ actor: req.user, action: 'export.created', target: { type: 'repository', id: String(id), label: file.label }, details: { format }, ip: req.ip });
+  res.set({ 'Content-Type': file.contentType, 'Content-Disposition': `attachment; filename="${file.filename}"` }).send(file.body);
+});
+
 repositoriesRouter.get('/:id/branches', (req, res) =>
   sendAnalytics(res, getBranches(idSchema.parse(req.params.id), pageSchema.parse(req.query.page))),
 );

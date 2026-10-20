@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Timer } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { BookmarkButton } from '../components/BookmarkButton';
+import { ExportMenu } from '../components/ExportMenu';
+import { AlertButton } from '../components/alerts/AlertButton';
 import {
   BranchesView,
   CommitsView,
@@ -189,6 +191,8 @@ export default function RepoPage() {
           {meta && user && (
             <>
               <BookmarkButton repo={meta} />
+              <AlertButton repo={meta} />
+              <ExportMenu repoId={meta.id} />
               <Link to={`/compare?repos=${encodeURIComponent(meta.fullName)}`} className={buttonClass('secondary', 'sm')}>
                 <Layers className="size-3.5" /> Compare
               </Link>

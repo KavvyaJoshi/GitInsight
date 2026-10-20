@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb-memory-server": "^11.3.0",
     "mongoose": "^9.11.2",
+    "pdfkit": "^0.20.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -31,6 +33,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",

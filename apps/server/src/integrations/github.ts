@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { HttpError } from '../lib/errors';
+import { track } from '../services/activity.service';
 
 const API = 'https://api.github.com';
 
@@ -73,14 +74,17 @@ export async function githubFetch(path: string, notFound: HttpError, accept = 'a
   if (config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
 
   let res: Response;
+  track('github.calls');
   try {
     res = await fetch(`${API}${path}`, { headers, signal: AbortSignal.timeout(config.githubTimeoutMs) });
   } catch {
+    track('github.errors');
     throw new HttpError(502, 'GITHUB_UNAVAILABLE', 'GitHub could not be reached. Please try again in a moment.');
   }
 
   const resetAt = recordRateLimit(res);
   if (res.ok) return res;
+  if (res.status !== 404) track('github.errors');
   if (res.status === 404) throw notFound;
   if (res.status === 401) throw new HttpError(502, 'GITHUB_AUTH_REQUIRED', 'GitHub requires an API token for this data.');
   if (res.status === 429 || (res.status === 403 && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after')))) {

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Clock, Layers, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Clock, Layers, Pause, Pencil, Play, Plus, Rocket, Star, Tag, Trash2, X } from 'lucide-react';
+import { RocketProgress } from '../components/alerts/RocketProgress';
 import { useToast } from '../components/Toast';
 import { Alert, Button, Spinner, buttonClass } from '../components/ui';
-import { api, ApiError, type BookmarkItem, type CollectionItem, type HistoryEntry } from '../lib/api';
-import { compactNumber, formatTime, languageColor } from '../lib/format';
+import { api, ApiError, type AlertItem, type BookmarkItem, type CollectionItem, type HistoryEntry } from '../lib/api';
+import { compactNumber, formatTime, languageColor, relativeTime } from '../lib/format';
 
 // ---- Shelves ----
 
@@ -30,7 +31,7 @@ function BookSpine({ book, onRemove }: { book: BookmarkItem; onRemove: () => voi
       <Link
         to={`/${book.fullName}`}
         title={`${book.fullName}${book.description ? `: ${book.description}` : ''}`}
-        className="book relative flex flex-col items-center justify-between overflow-hidden rounded-t-[4px] rounded-b-[2px] py-2 outline-none"
+        className="book relative flex flex-col items-center justify-between overflow-hidden rounded-t-sm rounded-b-xs py-2 outline-none"
         style={{ height, width: name.length > 16 ? 46 : 40, backgroundColor: color, color: ink }}
       >
         <span className="h-1 w-full opacity-40" style={{ backgroundColor: ink }} />
@@ -297,7 +298,7 @@ function History() {
           <ol className="relative space-y-1 border-l border-zinc-200 pl-5 dark:border-zinc-800">
             {list.map((e) => (
               <li key={e.id} className="group relative flex items-center gap-3 rounded-md py-1.5 pr-2 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                <span className="absolute top-1/2 -left-[25px] size-2 -translate-y-1/2 rounded-full border-2 border-white bg-zinc-300 dark:border-zinc-950 dark:bg-zinc-600" />
+                <span className="absolute top-1/2 -left-6.25 size-2 -translate-y-1/2 rounded-full border-2 border-white bg-zinc-300 dark:border-zinc-950 dark:bg-zinc-600" />
                 <span className="w-14 shrink-0 font-mono text-xs text-zinc-400 tabular-nums">{formatTime(e.searchedAt)}</span>
                 <Link to={`/${e.fullName}`} className="min-w-0 flex-1 truncate font-mono text-sm hover:underline">
                   {e.fullName}
@@ -325,30 +326,129 @@ function History() {
   );
 }
 
+// ---- Alerts ----
+
+function Alerts() {
+  const toast = useToast();
+  const [alerts, setAlerts] = useState<AlertItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<{ alerts: AlertItem[] }>('/alerts')
+      .then((r) => setAlerts(r.alerts))
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load your alerts.'));
+  }, []);
+  useEffect(load, [load]);
+
+  async function toggle(a: AlertItem) {
+    await api(`/alerts/${a.id}`, { method: 'PATCH', body: { active: !a.active } }).catch(() => undefined);
+    toast(a.active ? 'Alert paused' : 'Alert resumed');
+    load();
+  }
+
+  async function remove(a: AlertItem) {
+    await api(`/alerts/${a.id}`, { method: 'DELETE' }).catch(() => undefined);
+    load();
+  }
+
+  if (error) return <Alert>{error}</Alert>;
+  if (!alerts) return <Spinner label="Loading alerts" />;
+  if (alerts.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-14 text-center dark:border-zinc-700">
+        <Rocket className="mx-auto size-6 rotate-45 text-zinc-400" />
+        <p className="mt-3 font-medium">No alerts yet</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-zinc-500">
+          Open any repository and press <b>Alert</b> to hear when it reaches a star milestone or publishes a new release.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="grid gap-4 md:grid-cols-2">
+      {alerts.map((a) => (
+        <li key={a.id} className={`rounded-xl border border-zinc-200 p-5 dark:border-zinc-800 ${a.active ? '' : 'opacity-60'}`}>
+          <div className="flex items-start gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+              {a.type === 'new_release' ? <Tag className="size-4" /> : <Star className="size-4" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <Link to={`/${a.fullName}`} className="block truncate font-mono text-sm font-medium hover:underline">
+                {a.fullName}
+              </Link>
+              <p className="text-sm text-zinc-500">
+                {a.type === 'new_release' ? 'When a new release is published' : `When stars reach ${a.threshold!.toLocaleString('en')}`}
+              </p>
+            </div>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                !a.active
+                  ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'
+                  : a.triggered
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300'
+              }`}
+            >
+              {!a.active ? 'Paused' : a.triggered ? 'Reached' : 'Watching'}
+            </span>
+          </div>
+
+          {a.type === 'star_threshold' && <RocketProgress current={a.lastStars} goal={a.threshold!} />}
+          {a.type === 'new_release' && (
+            <p className="mt-3 rounded-md bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+              Latest release: <span className="font-mono">{a.lastReleaseTag ?? 'none yet'}</span>
+            </p>
+          )}
+          {a.lastError && <p className="mt-2 text-xs text-red-600 dark:text-red-400">Last check failed: {a.lastError}</p>}
+
+          <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
+            <span>{a.lastCheckedAt ? `Checked ${relativeTime(a.lastCheckedAt)}` : 'Not checked yet'}</span>
+            <span className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => toggle(a)}>
+                {a.active ? <Pause className="size-3.5" /> : <Play className="size-3.5" />} {a.active ? 'Pause' : 'Resume'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => remove(a)} aria-label={`Delete alert for ${a.fullName}`}>
+                <Trash2 className="size-3.5" />
+              </Button>
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const TABS = [
+  { id: 'shelves', label: 'Bookshelves' },
+  { id: 'history', label: 'Search history' },
+  { id: 'alerts', label: 'Alerts' },
+] as const;
+
 export default function LibraryPage() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'history' ? 'history' : 'shelves';
+  const tab = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'shelves';
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">Your library</h1>
       <p className="mt-1 text-sm text-zinc-500">Saved repositories and everything you have looked up.</p>
       <div className="mt-6 mb-8 flex gap-1 border-b border-zinc-200 dark:border-zinc-800" role="tablist">
-        {(['shelves', 'history'] as const).map((t) => (
+        {TABS.map((t) => (
           <button
-            key={t}
+            key={t.id}
             role="tab"
-            aria-selected={tab === t}
-            onClick={() => setParams(t === 'shelves' ? {} : { tab: t }, { replace: true })}
-            className={`-mb-px border-b-2 px-3 py-2.5 text-sm capitalize transition-colors ${
-              tab === t ? 'border-zinc-900 font-medium dark:border-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+            aria-selected={tab === t.id}
+            onClick={() => setParams(t.id === 'shelves' ? {} : { tab: t.id }, { replace: true })}
+            className={`-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors ${
+              tab === t.id ? 'border-zinc-900 font-medium dark:border-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
             }`}
           >
-            {t === 'shelves' ? 'Bookshelves' : 'Search history'}
+            {t.label}
           </button>
         ))}
       </div>
-      {tab === 'shelves' ? <Shelves /> : <History />}
+      {tab === 'shelves' ? <Shelves /> : tab === 'history' ? <History /> : <Alerts />}
     </div>
   );
 }

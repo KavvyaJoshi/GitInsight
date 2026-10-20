@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { HttpError } from '../../lib/errors';
 import { toPublicUser, type UserDoc } from '../../models/User';
+import { logActivity, track } from '../../services/activity.service';
 import { loginWithGoogle, loginWithPassword, registerWithPassword } from '../../services/auth.service';
 import { createSession, revokeSessionByToken, rotateSession, signAccessToken } from '../../services/tokens';
 import { requireAuth } from '../middleware/auth';
@@ -59,18 +60,32 @@ authRouter.get('/config', (_req, res) => {
 authRouter.post('/register', async (req, res) => {
   const input = registerSchema.parse(req.body);
   const user = await registerWithPassword(input);
+  track('auth.registrations');
+  await logActivity({ actor: user, action: 'auth.register', ip: req.ip });
   res.status(201).json(await startSession(req, res, user));
 });
 
 authRouter.post('/login', async (req, res) => {
   const { email, password } = loginSchema.parse(req.body);
-  const user = await loginWithPassword(email, password);
+  let user: UserDoc;
+  try {
+    user = await loginWithPassword(email, password);
+  } catch (err) {
+    if (err instanceof HttpError && err.code === 'ACCOUNT_LOCKED') {
+      await logActivity({ action: 'auth.lockout', target: { type: 'user', id: email, label: email }, ip: req.ip });
+    }
+    throw err;
+  }
+  track('auth.logins');
+  await logActivity({ actor: user, action: 'auth.login', details: { method: 'password' }, ip: req.ip });
   res.json(await startSession(req, res, user));
 });
 
 authRouter.post('/google', async (req, res) => {
   const { credential } = googleSchema.parse(req.body);
   const user = await loginWithGoogle(credential);
+  track('auth.logins');
+  await logActivity({ actor: user, action: 'auth.login', details: { method: 'google' }, ip: req.ip });
   res.json(await startSession(req, res, user));
 });
 

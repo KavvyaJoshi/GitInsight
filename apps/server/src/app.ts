@@ -4,6 +4,7 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import { config } from './config';
+import { track } from './services/activity.service';
 import { authenticate } from './api/middleware/auth';
 import { errorHandler } from './api/middleware/errors';
 import { adminRouter } from './api/routes/admin';
@@ -18,6 +19,10 @@ export function createApp() {
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
+  app.use('/api', (_req, _res, next) => {
+    track('api.requests');
+    next();
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
