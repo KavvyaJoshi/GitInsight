@@ -1,0 +1,36 @@
+import { Schema, model, type HydratedDocument, type InferSchemaType } from 'mongoose';
+
+export const ROLES = ['user', 'admin'] as const;
+export type Role = (typeof ROLES)[number];
+
+const userSchema = new Schema(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name: { type: String, trim: true, default: '' },
+    // Never selected by default so it cannot leak into responses.
+    passwordHash: { type: String, select: false },
+    googleId: { type: String, unique: true, sparse: true },
+    role: { type: String, enum: ROLES, default: 'user', required: true },
+    status: { type: String, enum: ['active', 'deactivated'], default: 'active', required: true },
+    failedLoginCount: { type: Number, default: 0, required: true },
+    lockUntil: { type: Date, default: null },
+    lastLoginAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+export type UserDoc = HydratedDocument<InferSchemaType<typeof userSchema>>;
+export const User = model('User', userSchema);
+
+export function toPublicUser(user: UserDoc) {
+  return {
+    id: user.id as string,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+    googleLinked: Boolean(user.googleId),
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt ?? null,
+  };
+}
