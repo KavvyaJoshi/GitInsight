@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AlertTriangle, BarChart3, Loader2, RotateCw, Table2 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../lib/api';
-import { relativeTime } from '../../lib/format';
+import { formatTime, relativeTime } from '../../lib/format';
 import type { AnalyticsState } from '../../lib/useAnalytics';
 import { Button } from '../ui';
 
@@ -23,6 +23,10 @@ interface PanelProps<T> {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'RATE_LIMITED') {
+    const resetAt = typeof error.details.resetAt === 'string' ? error.details.resetAt : null;
+    return `GitHub’s hourly request limit for this server has been used up.${resetAt ? ` This data will be available again after ${formatTime(resetAt)}.` : ' Try again later.'}`;
+  }
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error && error.message) return error.message;
   return 'The GitInsight server could not be reached.';

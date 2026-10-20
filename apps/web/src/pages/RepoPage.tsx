@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Sparkles, Timer, TreeDeciduous, TrendingUp, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Sparkles, Timer, TreePine, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { BookmarkButton } from '../components/BookmarkButton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -17,6 +17,7 @@ import {
 } from '../components/analytics/Views';
 import { AiSummaryView, AiTrendView, HealthView, ScoreRing, healthPath } from '../components/analytics/Insights';
 import { useAnalytics } from '../lib/useAnalytics';
+import { useScrollFade } from '../lib/useScrollFade';
 import { OverviewCard, OverviewSkeleton } from '../components/repo/OverviewCard';
 import { RepoSearch } from '../components/RepoSearch';
 import { Alert, Button, buttonClass } from '../components/ui';
@@ -30,7 +31,7 @@ const TABS: { slug: string; label: string; featured?: LucideIcon }[] = [
   { slug: 'overview', label: 'Overview' },
   { slug: 'ai-summary', label: 'AI Summary', featured: Sparkles },
   { slug: 'ai-trend', label: 'AI Trend', featured: TrendingUp },
-  { slug: 'branches', label: 'Branch tree', featured: TreeDeciduous },
+  { slug: 'branches', label: 'Branch tree', featured: TreePine },
   { slug: 'health', label: 'Health' },
   { slug: 'languages', label: 'Languages' },
   { slug: 'contributors', label: 'Contributors' },
@@ -153,6 +154,7 @@ export default function RepoPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = TABS.find((t) => t.slug === searchParams.get('tab')) ?? TABS[0];
   const setTab = (slug: string) => setSearchParams(slug === 'overview' ? {} : { tab: slug }, { replace: true });
+  const tabStrip = useScrollFade<HTMLDivElement>('[role=tab][aria-selected=true]', tab.slug);
   const parsed = parseRepoRef(`${params.owner}/${params.repo}`);
   const ref = parsed.ok ? parsed.value : null;
   const { state, retry } = useRepository(ref);
@@ -216,7 +218,12 @@ export default function RepoPage() {
         <ErrorState error={state.error} owner={owner} repo={repo} onRetry={retry} />
       ) : (
         <>
-          <div className="mt-6 -mx-4 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800" role="tablist">
+          <div
+            ref={tabStrip.ref}
+            data-fade={tabStrip.fade}
+            className="scroll-strip mt-6 -mx-4 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800"
+            role="tablist"
+          >
             <div className="flex gap-1">
               {TABS.map((t, i) => {
                 const Icon = t.featured;

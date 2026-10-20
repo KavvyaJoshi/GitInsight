@@ -111,6 +111,24 @@
   transform-origin: 400px 490px;
   animation: tree-sway 7s ease-in-out 2.5s infinite;
 }
+/* Horizontally scrollable strips (the dashboard tab bar): no native scrollbar, faded edges where more is hidden. */
+.scroll-strip {
+  scrollbar-width: none;
+  overflow-y: hidden;
+}
+.scroll-strip::-webkit-scrollbar {
+  display: none;
+}
+.scroll-strip[data-fade='right'] {
+  mask-image: linear-gradient(to right, black calc(100% - 56px), transparent);
+}
+.scroll-strip[data-fade='left'] {
+  mask-image: linear-gradient(to left, black calc(100% - 56px), transparent);
+}
+.scroll-strip[data-fade='both'] {
+  mask-image: linear-gradient(to right, transparent, black 56px, black calc(100% - 56px), transparent);
+}
+
 /* Library: books lift off the shelf on hover. */
 .book {
   transition:
