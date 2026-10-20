@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { isDark } from '../lib/theme';
 
 declare global {
   interface Window {
@@ -46,18 +47,25 @@ export function GoogleButton({ onCredential }: { onCredential: (credential: stri
       .then(() => {
         if (!ref.current || !window.google) return;
         window.google.accounts.id.initialize({ client_id: clientId, callback: (res) => callback.current(res.credential) });
-        window.google.accounts.id.renderButton(ref.current, { theme: 'outline', size: 'large', text: 'continue_with', width: 320 });
+        window.google.accounts.id.renderButton(ref.current, {
+          theme: isDark() ? 'filled_black' : 'outline',
+          size: 'large',
+          text: 'continue_with',
+          width: ref.current.offsetWidth || 384,
+        });
       })
       .catch(() => undefined);
   }, [clientId]);
 
   if (!clientId) return null;
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 text-xs text-slate-500">
-        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" /> or <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 text-xs text-zinc-400">
+        <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+        or
+        <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
       </div>
-      <div ref={ref} className="flex justify-center" />
+      <div ref={ref} className="flex h-10 w-full justify-center" />
     </div>
   );
 }

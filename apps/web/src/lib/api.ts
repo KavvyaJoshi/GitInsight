@@ -6,6 +6,7 @@ export interface User {
   name: string;
   role: Role;
   status: 'active' | 'deactivated';
+  passwordSet: boolean;
   googleLinked: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -21,9 +22,13 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
-    public fields?: Record<string, string>,
+    public details: Record<string, unknown> = {},
   ) {
     super(message);
+  }
+
+  get fields(): Record<string, string> {
+    return (this.details.fields as Record<string, string> | undefined) ?? {};
   }
 }
 
@@ -78,7 +83,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(res.status, data.error?.code ?? 'UNKNOWN', data.error?.message ?? 'Request failed.', data.error?.fields);
+    throw new ApiError(res.status, data.error?.code ?? 'UNKNOWN', data.error?.message ?? 'Request failed.', data.error);
   }
   return data as T;
 }

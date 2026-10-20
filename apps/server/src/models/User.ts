@@ -9,6 +9,7 @@ const userSchema = new Schema(
     name: { type: String, trim: true, default: '' },
     // Never selected by default so it cannot leak into responses.
     passwordHash: { type: String, select: false },
+    hasPassword: { type: Boolean, default: false, required: true },
     googleId: { type: String, unique: true, sparse: true },
     role: { type: String, enum: ROLES, default: 'user', required: true },
     status: { type: String, enum: ['active', 'deactivated'], default: 'active', required: true },
@@ -29,6 +30,7 @@ export function toPublicUser(user: UserDoc) {
     name: user.name,
     role: user.role,
     status: user.status,
+    passwordSet: user.hasPassword,
     googleLinked: Boolean(user.googleId),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt ?? null,

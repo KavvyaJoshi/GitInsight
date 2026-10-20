@@ -30,7 +30,7 @@ export async function registerWithPassword(input: { email: string; password: str
     throw new HttpError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
   }
   const passwordHash = await bcrypt.hash(input.password, config.bcryptRounds);
-  return User.create({ email: input.email, name: input.name ?? '', passwordHash, role: roleForEmail(input.email) });
+  return User.create({ email: input.email, name: input.name ?? '', passwordHash, hasPassword: true, role: roleForEmail(input.email) });
 }
 
 export async function loginWithPassword(email: string, password: string): Promise<UserDoc> {
