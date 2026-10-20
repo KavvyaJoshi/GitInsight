@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowUpRight, BarChart3, CloudOff, RotateCw, SearchX, Timer } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { ArrowUpRight, CloudOff, RotateCw, SearchX, Sparkles, Timer } from 'lucide-react';
+import {
+  BranchesView,
+  CommitsView,
+  ContributorsView,
+  FrequencyView,
+  HeatmapView,
+  LanguagesView,
+  PullsIssuesView,
+} from '../components/analytics/Views';
 import { OverviewCard, OverviewSkeleton } from '../components/repo/OverviewCard';
 import { RepoSearch } from '../components/RepoSearch';
 import { Alert, Button, buttonClass } from '../components/ui';
@@ -8,7 +17,29 @@ import { api, ApiError, type RepositoryResponse } from '../lib/api';
 import { formatTime, relativeTime } from '../lib/format';
 import { parseRepoRef, type RepoRef } from '../lib/repoRef';
 
-const TABS = ['Overview', 'Languages', 'Contributors', 'Commits', 'PRs & Issues', 'Heatmap', 'Frequency', 'Branches', 'Health', 'AI Summary', 'AI Trend'];
+const TABS = [
+  { slug: 'overview', label: 'Overview' },
+  { slug: 'languages', label: 'Languages' },
+  { slug: 'contributors', label: 'Contributors' },
+  { slug: 'commits', label: 'Commits' },
+  { slug: 'pulls-issues', label: 'PRs & Issues' },
+  { slug: 'heatmap', label: 'Heatmap' },
+  { slug: 'frequency', label: 'Frequency' },
+  { slug: 'branches', label: 'Branches' },
+  { slug: 'health', label: 'Health' },
+  { slug: 'ai-summary', label: 'AI Summary' },
+  { slug: 'ai-trend', label: 'AI Trend' },
+];
+
+const ANALYTICS_VIEWS: Record<string, (props: { repoId: number }) => ReactNode> = {
+  languages: LanguagesView,
+  contributors: ContributorsView,
+  commits: CommitsView,
+  'pulls-issues': PullsIssuesView,
+  heatmap: HeatmapView,
+  frequency: FrequencyView,
+  branches: BranchesView,
+};
 
 type LoadState = { status: 'loading' } | { status: 'error'; error: unknown } | { status: 'ready'; data: RepositoryResponse };
 
@@ -77,9 +108,11 @@ function ErrorState({ error, owner, repo, onRetry }: { error: unknown; owner: st
 function PendingTab({ tab }: { tab: string }) {
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-zinc-300 px-6 py-16 text-center dark:border-zinc-700">
-      <BarChart3 className="size-6 text-zinc-400" aria-hidden />
+      <Sparkles className="size-6 text-zinc-400" aria-hidden />
       <h2 className="mt-4 font-medium">{tab} isn’t available yet</h2>
-      <p className="mt-1.5 max-w-sm text-sm text-zinc-500">This view arrives with repository analytics. The Overview tab already shows live data.</p>
+      <p className="mt-1.5 max-w-sm text-sm text-zinc-500">
+        The health score and AI insights are built on top of the analytics in the other tabs, and arrive next.
+      </p>
     </div>
   );
 }
@@ -87,7 +120,9 @@ function PendingTab({ tab }: { tab: string }) {
 export default function RepoPage() {
   const params = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(TABS[0]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = TABS.find((t) => t.slug === searchParams.get('tab')) ?? TABS[0];
+  const setTab = (slug: string) => setSearchParams(slug === 'overview' ? {} : { tab: slug }, { replace: true });
   const parsed = parseRepoRef(`${params.owner}/${params.repo}`);
   const ref = parsed.ok ? parsed.value : null;
   const { state, retry } = useRepository(ref);
@@ -96,10 +131,8 @@ export default function RepoPage() {
   useEffect(() => {
     if (state.status !== 'ready' || !ref) return;
     const canonical = state.data.repository.fullName;
-    if (canonical !== `${ref.owner}/${ref.repo}`) navigate(`/${canonical}`, { replace: true });
+    if (canonical !== `${ref.owner}/${ref.repo}`) navigate({ pathname: `/${canonical}`, search: window.location.search }, { replace: true });
   }, [state, ref, navigate]);
-
-  useEffect(() => setTab(TABS[0]), [params.owner, params.repo]);
 
   if (!parsed.ok) {
     return (
@@ -144,17 +177,17 @@ export default function RepoPage() {
             <div className="flex gap-1">
               {TABS.map((t) => (
                 <button
-                  key={t}
+                  key={t.slug}
                   role="tab"
                   aria-selected={t === tab}
-                  onClick={() => setTab(t)}
+                  onClick={() => setTab(t.slug)}
                   className={`-mb-px border-b-2 px-3 py-2.5 text-sm whitespace-nowrap transition-colors ${
                     t === tab
                       ? 'border-zinc-900 font-medium text-zinc-900 dark:border-zinc-100 dark:text-zinc-100'
                       : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                   }`}
                 >
-                  {t}
+                  {t.label}
                 </button>
               ))}
             </div>
@@ -166,8 +199,13 @@ export default function RepoPage() {
                 GitHub can’t be reached right now, so this is the copy saved {relativeTime(data.fetchedAt)}.
               </Alert>
             )}
-            {tab !== 'Overview' ? <PendingTab tab={tab} /> : meta ? <OverviewCard repo={meta} /> : <OverviewSkeleton />}
-            {data && (
+            {(() => {
+              if (!meta) return tab.slug === 'overview' || ANALYTICS_VIEWS[tab.slug] ? <OverviewSkeleton /> : <PendingTab tab={tab.label} />;
+              if (tab.slug === 'overview') return <OverviewCard repo={meta} />;
+              const View = ANALYTICS_VIEWS[tab.slug];
+              return View ? <View key={meta.id} repoId={meta.id} /> : <PendingTab tab={tab.label} />;
+            })()}
+            {data && tab.slug === 'overview' && (
               <p className="text-xs text-zinc-400">
                 Fetched from GitHub {relativeTime(data.fetchedAt)} · refreshed at most every 15 minutes ·{' '}
                 <Link to="/" className="hover:text-zinc-600 hover:underline dark:hover:text-zinc-300">

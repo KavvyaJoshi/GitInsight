@@ -47,6 +47,48 @@ export interface RepositoryResponse {
   source: 'cache' | 'github' | 'stale';
 }
 
+export interface AnalyticsResult<T> {
+  status: 'ready';
+  data: T;
+  computedAt: string;
+  stale: boolean;
+}
+
+export interface Languages {
+  totalBytes: number;
+  languageCount: number;
+  languages: { name: string; bytes: number; percent: number }[];
+}
+export interface Contributors {
+  contributors: { login: string; avatarUrl: string; url: string; commits: number; isBot: boolean }[];
+}
+interface ActivityWindow {
+  windowStart: string;
+  windowEnd: string;
+  totalCommits: number;
+}
+export interface CommitTrend extends ActivityWindow {
+  monthly: { month: string; commits: number }[];
+}
+export interface Heatmap extends ActivityWindow {
+  activeDays: number;
+  days: { date: string; count: number }[];
+}
+export interface Frequency extends ActivityWindow {
+  weekday: { day: string; commits: number }[];
+}
+export interface PullsIssues {
+  openPullRequests: number;
+  openIssues: number;
+}
+export interface Branches {
+  defaultBranch: string;
+  page: number;
+  perPage: number;
+  totalPages: number;
+  branches: { name: string; protected: boolean; isDefault: boolean }[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

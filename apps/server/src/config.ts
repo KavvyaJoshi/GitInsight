@@ -31,4 +31,7 @@ export const config = {
   githubToken: env.GITHUB_TOKEN ?? '',
   githubTimeoutMs: 8000,
   metadataTtlSec: Number(env.METADATA_TTL_SECONDS ?? 15 * 60),
+  analyticsTtlSec: Number(env.ANALYTICS_TTL_SECONDS ?? 60 * 60),
+  // GitHub answers 202 while it computes statistics; wait between retries (none in tests).
+  statsRetryDelayMs: env.NODE_ENV === 'test' ? 0 : 1500,
 };

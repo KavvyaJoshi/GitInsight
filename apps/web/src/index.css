@@ -7,6 +7,52 @@
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/*
+ * Chart tokens. Categorical slots use the validated dataviz reference palette in its fixed
+ * order (light and dark steps); single-series charts use the brand accent; the heatmap is a
+ * one-hue sequential ramp where step 0 recedes into the surface.
+ */
+:root {
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #6250d6;
+  --chart-8: #e34948;
+  --chart-other: #a1a1aa;
+  --chart-accent: #059669;
+  --chart-grid: #e4e4e7;
+  --chart-axis: #71717a;
+  --chart-surface: #ffffff;
+  --heat-0: #f4f4f5;
+  --heat-1: #a7f3d0;
+  --heat-2: #34d399;
+  --heat-3: #059669;
+  --heat-4: #065f46;
+}
+.dark {
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-other: #71717a;
+  --chart-accent: #10b981;
+  --chart-grid: #27272a;
+  --chart-axis: #a1a1aa;
+  --chart-surface: #09090b;
+  --heat-0: #18181b;
+  --heat-1: #064e3b;
+  --heat-2: #047857;
+  --heat-3: #10b981;
+  --heat-4: #6ee7b7;
+}
+
 @layer base {
   html {
     color-scheme: light;

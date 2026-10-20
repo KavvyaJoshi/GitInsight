@@ -48,8 +48,23 @@ function recordRateLimit(res: Response): string | null {
   return reset ? githubRateLimit.resetAt : null;
 }
 
-/** GET a GitHub REST path and translate failures into user-facing errors. */
+/** Number of the last page from a GitHub Link header, or null when there is only one page. */
+export function lastPageFromLink(link: string | null): number | null {
+  const match = link?.match(/[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+  return match ? Number(match[1]) : null;
+}
+
+/** GET a GitHub REST path and parse the JSON body. */
 export async function githubGet<T>(path: string, notFound: HttpError): Promise<T> {
+  const res = await githubFetch(path, notFound);
+  return (await res.json()) as T;
+}
+
+/**
+ * GET a GitHub REST path, translating failures into user-facing errors. Successful
+ * responses (including 202 "still computing" and 204 "no content") are returned as-is.
+ */
+export async function githubFetch(path: string, notFound: HttpError): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
@@ -65,10 +80,16 @@ export async function githubGet<T>(path: string, notFound: HttpError): Promise<T
   }
 
   const resetAt = recordRateLimit(res);
-  if (res.ok) return (await res.json()) as T;
+  if (res.ok) return res;
   if (res.status === 404) throw notFound;
   if (res.status === 429 || (res.status === 403 && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after')))) {
     throw new HttpError(429, 'RATE_LIMITED', 'GitHub’s API rate limit has been reached. Please try again later.', { resetAt });
+  }
+  if (res.status === 403 || res.status === 422) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    if (/too large/i.test(body.message ?? '')) {
+      throw new HttpError(422, 'TOO_LARGE', 'GitHub doesn’t provide this data through its API for a repository this large.');
+    }
   }
   if (res.status === 403 || res.status === 451) {
     throw new HttpError(403, 'REPO_UNAVAILABLE', 'GitHub is not allowing access to this repository.');

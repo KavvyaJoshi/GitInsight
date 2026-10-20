@@ -33,6 +33,8 @@ const repositorySchema = new Schema(
     fullNameLower: { type: String, required: true, index: true },
     metadata: { type: Schema.Types.Mixed, required: true },
     fetchedAt: { type: Date, required: true },
+    // Computed analytics cached alongside the record (REQ-ANLY-008): { [kind]: { data, computedAt } }.
+    analytics: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );
