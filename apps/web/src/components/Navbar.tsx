@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { LogOut, Moon, Shield, Sun, UserRound } from 'lucide-react';
+import { Layers, Library, LogOut, Moon, Shield, Sun, UserRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { isDark, setTheme } from '../lib/theme';
+import { THEME_EVENT, isDark, setTheme } from '../lib/theme';
 import { Logo } from './Logo';
 import { RepoSearch } from './RepoSearch';
 import { useToast } from './Toast';
@@ -11,12 +11,22 @@ import { Avatar, RoleBadge, buttonClass } from './ui';
 const AUTH_PAGES = ['/login', '/register'];
 
 function ThemeToggle() {
+  const { user, updatePreferences } = useAuth();
   const [dark, setDark] = useState(isDark);
+
+  useEffect(() => {
+    const sync = () => setDark(isDark());
+    window.addEventListener(THEME_EVENT, sync);
+    return () => window.removeEventListener(THEME_EVENT, sync);
+  }, []);
+
   return (
     <button
       onClick={() => {
-        setTheme(dark ? 'light' : 'dark');
-        setDark(!dark);
+        const next = dark ? 'light' : 'dark';
+        // Signed-in users keep the choice on their account; guests keep it on this device.
+        if (user) updatePreferences({ theme: next }).catch(() => undefined);
+        else setTheme(next);
       }}
       aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
       className={`${buttonClass('ghost', 'sm')} w-8 px-0`}
@@ -78,8 +88,14 @@ function UserMenu() {
             <RoleBadge role={user.role} />
           </div>
           <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+          <Link to="/library" role="menuitem" className={item} onClick={close}>
+            <Library className="size-4 text-zinc-400" /> Library
+          </Link>
+          <Link to="/compare" role="menuitem" className={item} onClick={close}>
+            <Layers className="size-4 text-zinc-400" /> Compare
+          </Link>
           <Link to="/account" role="menuitem" className={item} onClick={close}>
-            <UserRound className="size-4 text-zinc-400" /> Account
+            <UserRound className="size-4 text-zinc-400" /> Account & preferences
           </Link>
           {user.role === 'admin' && (
             <Link to="/admin" role="menuitem" className={item} onClick={close}>
@@ -115,6 +131,26 @@ export function Navbar() {
     <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/85 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/85">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
         <Logo />
+        {user && (
+          <nav className="hidden items-center gap-1 sm:flex">
+            {[
+              { to: '/library', label: 'Library' },
+              { to: '/compare', label: 'Compare' },
+            ].map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+                  pathname.startsWith(link.to)
+                    ? 'font-medium text-zinc-900 dark:text-zinc-100'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
         {showSearch && (
           <div className="hidden max-w-sm flex-1 md:block">
             <RepoSearch size="sm" />

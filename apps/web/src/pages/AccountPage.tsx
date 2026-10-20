@@ -4,6 +4,7 @@ import { Check, Minus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import { Alert, Avatar, Button, RoleBadge } from '../components/ui';
+import type { Preferences } from '../lib/api';
 
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
@@ -41,12 +42,55 @@ function Method({ label, enabled }: { label: string; enabled: boolean }) {
   );
 }
 
+function Segmented<T extends string>({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p className="text-sm">{label}</p>
+        {hint && <p className="mt-0.5 max-w-xs text-xs text-zinc-500">{hint}</p>}
+      </div>
+      <div className="inline-flex shrink-0 rounded-md border border-zinc-200 p-0.5 dark:border-zinc-800" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            role="radio"
+            aria-checked={value === o.value}
+            onClick={() => value !== o.value && onChange(o.value)}
+            className={`rounded px-3 py-1 text-sm transition-colors ${
+              value === o.value ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AccountPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updatePreferences } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const denied = (useLocation().state as { denied?: string } | null)?.denied;
   if (!user) return null;
+
+  const save = (changes: Partial<Preferences>) =>
+    updatePreferences(changes)
+      .then(() => toast('Preferences saved'))
+      .catch(() => toast('Could not save your preferences.', 'error'));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
@@ -83,6 +127,41 @@ export default function AccountPage() {
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
           <Method label="Email and password" enabled={user.passwordSet} />
           <Method label="Google" enabled={user.googleLinked} />
+        </div>
+      </Section>
+
+      <Section title="Preferences" description="Saved to your account, so they follow you to every device.">
+        <div className="space-y-5">
+          <Segmented
+            label="Theme"
+            value={user.preferences.theme}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            onChange={(theme) => save({ theme })}
+          />
+          <Segmented
+            label="Analytics open as"
+            value={user.preferences.defaultView}
+            options={[
+              { value: 'chart', label: 'Charts' },
+              { value: 'table', label: 'Tables' },
+            ]}
+            onChange={(defaultView) => save({ defaultView })}
+          />
+          <Segmented
+            label="Email digest"
+            hint="Your choice is saved now; digests are sent once email delivery is switched on for this deployment."
+            value={user.preferences.digest}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'daily', label: 'Daily' },
+              { value: 'weekly', label: 'Weekly' },
+            ]}
+            onChange={(digest) => save({ digest })}
+          />
         </div>
       </Section>
 

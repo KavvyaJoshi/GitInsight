@@ -12,20 +12,12 @@ import {
 } from '../../services/analytics.service';
 import { getAiSummary, getAiTrendInsight } from '../../services/ai.service';
 import { getHealthScore } from '../../services/health.service';
+import { recordSearch } from '../../services/personal.service';
 import { getRepositoryById, resolveRepository } from '../../services/repository.service';
+import { ownerSchema, repoSchema } from '../../lib/repoRef';
 
-// Same GitHub naming rules as the web client (apps/web/src/lib/repoRef.ts); validated here before calling GitHub.
-const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
-const REPO = /^[A-Za-z0-9._-]{1,100}$/;
-
-const searchSchema = z.object({
-  owner: z.string().trim().regex(OWNER, 'Enter a valid GitHub owner name.'),
-  repo: z
-    .string()
-    .trim()
-    .regex(REPO, 'Enter a valid GitHub repository name.')
-    .refine((r) => r !== '.' && r !== '..', 'Enter a valid GitHub repository name.'),
-});
+// Validated here before calling GitHub.
+const searchSchema = z.object({ owner: ownerSchema, repo: repoSchema });
 const idSchema = z.coerce.number().int().positive('Invalid repository ID.');
 const pageSchema = z.coerce.number().int().min(1).max(1000).default(1);
 
@@ -45,7 +37,10 @@ export const repositoriesRouter = Router();
 
 repositoriesRouter.get('/search', async (req, res) => {
   const { owner, repo } = searchSchema.parse(req.query);
-  res.json(await resolveRepository(owner, repo));
+  const result = await resolveRepository(owner, repo);
+  // Registered users get a persistent search history (REQ-PERS-002); guests do not.
+  if (req.user) await recordSearch(req.user._id, result.repository);
+  res.json(result);
 });
 
 repositoriesRouter.get('/:id', async (req, res) => {

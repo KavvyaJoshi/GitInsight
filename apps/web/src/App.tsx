@@ -3,7 +3,9 @@ import { RequireAuth } from './auth/RequireAuth';
 import { Navbar } from './components/Navbar';
 import AccountPage from './pages/AccountPage';
 import AdminPage from './pages/AdminPage';
+import ComparePage from './pages/ComparePage';
 import HomePage from './pages/HomePage';
+import LibraryPage from './pages/LibraryPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import RegisterPage from './pages/RegisterPage';
@@ -34,6 +36,15 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/library"
+            element={
+              <RequireAuth>
+                <LibraryPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="/compare" element={<ComparePage />} />
           <Route path="/:owner/:repo" element={<RepoPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

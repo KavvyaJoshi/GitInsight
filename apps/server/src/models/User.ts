@@ -16,6 +16,12 @@ const userSchema = new Schema(
     failedLoginCount: { type: Number, default: 0, required: true },
     lockUntil: { type: Date, default: null },
     lastLoginAt: { type: Date },
+    // Persisted across sessions and devices (REQ-PERS-007).
+    preferences: {
+      theme: { type: String, enum: ['system', 'light', 'dark'], default: 'system' },
+      defaultView: { type: String, enum: ['chart', 'table'], default: 'chart' },
+      digest: { type: String, enum: ['off', 'daily', 'weekly'], default: 'off' },
+    },
   },
   { timestamps: true },
 );
@@ -34,5 +40,10 @@ export function toPublicUser(user: UserDoc) {
     googleLinked: Boolean(user.googleId),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt ?? null,
+    preferences: {
+      theme: user.preferences?.theme ?? 'system',
+      defaultView: user.preferences?.defaultView ?? 'chart',
+      digest: user.preferences?.digest ?? 'off',
+    },
   };
 }

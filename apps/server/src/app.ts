@@ -8,6 +8,7 @@ import { authenticate } from './api/middleware/auth';
 import { errorHandler } from './api/middleware/errors';
 import { adminRouter } from './api/routes/admin';
 import { authRouter } from './api/routes/auth';
+import { personalRouter } from './api/routes/personal';
 import { repositoriesRouter } from './api/routes/repositories';
 
 export function createApp() {
@@ -35,6 +36,8 @@ export function createApp() {
     rateLimit({ windowMs: 60_000, limit: 60, skip: () => config.isTest, standardHeaders: 'draft-8', legacyHeaders: false }),
     repositoriesRouter,
   );
+
+  app.use('/api', personalRouter);
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found.' } });

@@ -5,7 +5,8 @@ import { Schema, model } from 'mongoose';
 const aiInsightSchema = new Schema(
   {
     githubId: { type: Number, required: true },
-    type: { type: String, enum: ['summary', 'trend'], required: true },
+    // For comparisons, githubId is the smallest ID in the set; the hash covers every repository.
+    type: { type: String, enum: ['summary', 'trend', 'comparison'], required: true },
     inputHash: { type: String, required: true },
     model: { type: String, required: true },
     promptVersion: { type: String, required: true },

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowUpRight, CloudOff, RotateCw, SearchX, Timer } from 'lucide-react';
+import { ArrowUpRight, CloudOff, Layers, RotateCw, SearchX, Timer } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
+import { BookmarkButton } from '../components/BookmarkButton';
 import {
   BranchesView,
   CommitsView,
@@ -137,6 +139,7 @@ function ErrorState({ error, owner, repo, onRetry }: { error: unknown; owner: st
 export default function RepoPage() {
   const params = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = TABS.find((t) => t.slug === searchParams.get('tab')) ?? TABS[0];
   const setTab = (slug: string) => setSearchParams(slug === 'overview' ? {} : { tab: slug }, { replace: true });
@@ -181,8 +184,16 @@ export default function RepoPage() {
             <h1 className="truncate font-mono text-2xl font-medium tracking-tight sm:text-3xl">{meta?.name ?? repo}</h1>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {meta && <HealthBadge repoId={meta.id} onOpen={() => setTab('health')} />}
+          {meta && user && (
+            <>
+              <BookmarkButton repo={meta} />
+              <Link to={`/compare?repos=${encodeURIComponent(meta.fullName)}`} className={buttonClass('secondary', 'sm')}>
+                <Layers className="size-3.5" /> Compare
+              </Link>
+            </>
+          )}
           <a href={meta?.url ?? `https://github.com/${owner}/${repo}`} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'sm')}>
             View on GitHub <ArrowUpRight className="size-3.5" />
           </a>

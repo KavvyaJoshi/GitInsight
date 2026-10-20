@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, onSessionChange, refreshSession, setAccessToken, type AuthResponse, type User } from '../lib/api';
+import { api, onSessionChange, refreshSession, setAccessToken, type AuthResponse, type Preferences, type User } from '../lib/api';
+import { setTheme } from '../lib/theme';
 
 interface AuthContextValue {
   user: User | null;
@@ -8,6 +9,7 @@ interface AuthContextValue {
   register: (email: string, password: string, name: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => Promise<void>;
+  updatePreferences: (changes: Partial<Preferences>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -16,18 +18,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Preferences live on the account, so a signed-in user gets their theme on every device.
+  const signedIn = useCallback((next: User | null) => {
+    setUser(next);
+    if (next) setTheme(next.preferences.theme);
+  }, []);
+
   useEffect(() => {
     onSessionChange(setUser);
     // Restore the session from the refresh cookie after a page reload.
     refreshSession()
-      .then((session) => setUser(session?.user ?? null))
+      .then((session) => signedIn(session?.user ?? null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [signedIn]);
 
-  const accept = useCallback((res: AuthResponse) => {
-    setAccessToken(res.accessToken);
-    setUser(res.user);
-  }, []);
+  const accept = useCallback(
+    (res: AuthResponse) => {
+      setAccessToken(res.accessToken);
+      signedIn(res.user);
+    },
+    [signedIn],
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -41,6 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
         setAccessToken(null);
         setUser(null);
+      },
+      updatePreferences: async (changes) => {
+        if (changes.theme) setTheme(changes.theme);
+        const res = await api<{ user: User }>('/preferences', { method: 'PUT', body: changes });
+        setUser(res.user);
       },
     }),
     [user, loading, accept],

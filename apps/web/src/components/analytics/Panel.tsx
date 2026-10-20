@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { AlertTriangle, BarChart3, Loader2, RotateCw, Table2 } from 'lucide-react';
+import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../lib/api';
 import { relativeTime } from '../../lib/format';
 import type { AnalyticsState } from '../../lib/useAnalytics';
@@ -40,7 +41,9 @@ export function AnalyticsPanel<T>({
   emptyMessage,
   viewLabels = { chart: 'Chart', table: 'Table' },
 }: PanelProps<T>) {
-  const [view, setView] = useState<'chart' | 'table'>('chart');
+  // Registered users can choose whether analytics open as charts or tables (REQ-PERS-007).
+  const preferred = useAuth().user?.preferences.defaultView ?? 'chart';
+  const [view, setView] = useState<'chart' | 'table'>(table ? preferred : 'chart');
   const ready = state.status === 'ready' ? state.result : null;
   const empty = ready && isEmpty?.(ready.data);
 

@@ -10,7 +10,52 @@ export interface User {
   googleLinked: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  preferences: Preferences;
 }
+
+export interface Preferences {
+  theme: 'system' | 'light' | 'dark';
+  defaultView: 'chart' | 'table';
+  digest: 'off' | 'daily' | 'weekly';
+}
+
+export interface BookmarkItem {
+  id: string;
+  githubId: number;
+  fullName: string;
+  description: string | null;
+  language: string | null;
+  stars: number;
+  avatarUrl: string;
+  createdAt: string;
+}
+export interface CollectionItem {
+  id: string;
+  name: string;
+  createdAt: string;
+  bookmarks: BookmarkItem[];
+}
+export interface HistoryEntry {
+  id: string;
+  githubId: number;
+  fullName: string;
+  searchedAt: string;
+}
+export interface ComparisonSetItem {
+  id: string;
+  name: string;
+  repos: string[];
+  updatedAt: string;
+}
+export interface ComparisonEntry {
+  repository: RepositoryMetadata;
+  health: Health | null;
+  healthPending: boolean;
+  languages: Languages['languages'] | null;
+}
+export type ComparisonNarrative =
+  | { available: false; reason: 'NOT_CONFIGURED'; message: string }
+  | { available: true; narrative: string; bestFor: { repository: string; useCase: string }[]; model: string; generatedAt: string; sources: string[] };
 
 export interface AuthResponse {
   accessToken: string;
