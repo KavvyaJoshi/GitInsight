@@ -9,6 +9,16 @@ function secret(name: string, devFallback: string): string {
   return value;
 }
 
+const DEFAULT_MODELS = { gemini: 'gemini-3.5-flash-lite', anthropic: 'claude-opus-5-5', none: '' } as const;
+
+/** The configured AI provider, or "none" when its API key is missing. */
+function llmProvider(): keyof typeof DEFAULT_MODELS {
+  const choice = (env.LLM_PROVIDER || (env.GEMINI_API_KEY ? 'gemini' : 'anthropic')).toLowerCase();
+  if (choice === 'gemini' && env.GEMINI_API_KEY) return 'gemini';
+  if (choice === 'anthropic' && env.ANTHROPIC_API_KEY) return 'anthropic';
+  return 'none';
+}
+
 export const config = {
   isProd,
   isTest: env.NODE_ENV === 'test',
@@ -34,11 +44,13 @@ export const config = {
   analyticsTtlSec: Number(env.ANALYTICS_TTL_SECONDS ?? 60 * 60),
   // GitHub answers 202 while it computes statistics; wait between retries (none in tests).
   statsRetryDelayMs: env.NODE_ENV === 'test' ? 0 : 1500,
-  // AI insights: the Anthropic SDK reads ANTHROPIC_API_KEY itself; without it AI tabs show a fallback.
-  llmProvider: (env.LLM_PROVIDER || 'anthropic') === 'anthropic' && env.ANTHROPIC_API_KEY ? 'anthropic' : 'none',
-  llmModel: env.LLM_MODEL || 'claude-opus-5-5',
+  // AI insights: whichever provider is chosen needs its key; without one the AI tabs show a fallback.
+  llmProvider: llmProvider(),
+  llmModel: env.LLM_MODEL || DEFAULT_MODELS[llmProvider()],
+  geminiApiKey: env.GEMINI_API_KEY ?? '',
   // Leaves headroom inside the SRS 10-second target for the GitHub calls that gather inputs.
-  aiTimeoutMs: Number(env.AI_TIMEOUT_MS ?? 9000),
+  // Free-tier Gemini queues requests (5–12 s observed), so it gets more room; results are cached after the first call.
+  aiTimeoutMs: Number(env.AI_TIMEOUT_MS || (llmProvider() === 'gemini' ? 20_000 : 9000)),
   alertIntervalMinutes: Number(env.ALERT_INTERVAL_MINUTES ?? 60),
   // In development the API process also runs the background jobs, since the in-memory database can't be shared.
   runWorkerInApi: (env.RUN_WORKER_IN_API ?? (isProd ? 'false' : 'true')) === 'true',
