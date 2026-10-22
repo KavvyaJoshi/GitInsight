@@ -229,11 +229,104 @@ export function onSessionChange(listener: (user: User | null) => void) {
   sessionListener = listener;
 }
 
+// The API runs on Render's free plan, which sleeps when idle and takes up to a minute or so to boot.
+export type ServerStatus = 'unknown' | 'waking' | 'ready' | 'down';
+
+const WAKE_NOTICE_DELAY_MS = 2500;
+const WAKE_LIMIT_MS = 3 * 60_000;
+const WAKE_POLL_MS = 3000;
+
+let serverStatus: ServerStatus = 'unknown';
+let wakeInFlight: Promise<boolean> | null = null;
+const statusListeners = new Set<(status: ServerStatus) => void>();
+
+function setServerStatus(next: ServerStatus) {
+  serverStatus = next;
+  statusListeners.forEach((listener) => listener(next));
+}
+
+export function onServerStatus(listener: (status: ServerStatus) => void): () => void {
+  statusListeners.add(listener);
+  listener(serverStatus);
+  return () => statusListeners.delete(listener);
+}
+
+const isJson = (res: Response) => res.headers.get('content-type')?.includes('application/json') ?? false;
+
+async function pingHealth(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store', signal: AbortSignal.timeout(20_000) });
+    return res.ok && isJson(res);
+  } catch {
+    return false;
+  }
+}
+
+/** Resolves once /api/health answers; shows the wake-up notice if that takes more than a moment. */
+function serverReady(): Promise<boolean> {
+  if (serverStatus === 'ready') return Promise.resolve(true);
+  wakeInFlight ??= (async () => {
+    const notice = setTimeout(() => setServerStatus('waking'), WAKE_NOTICE_DELAY_MS);
+    try {
+      const deadline = Date.now() + WAKE_LIMIT_MS;
+      while (Date.now() < deadline) {
+        if (await pingHealth()) {
+          setServerStatus('ready');
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
+      }
+      setServerStatus('down');
+      return false;
+    } finally {
+      clearTimeout(notice);
+      wakeInFlight = null;
+    }
+  })();
+  return wakeInFlight;
+}
+
+/** A non-JSON 502–504 (or HTML success page) comes from Vercel's or Render's proxy, not the GitInsight API. */
+const fromProxy = (res: Response) => !isJson(res) && res.status !== 204 && (res.ok || (res.status >= 502 && res.status <= 504));
+
+/**
+ * fetch for the API that rides out a cold start: it waits for the server first, and if the server went
+ * to sleep anyway, waits again and resends. Only reads and token refreshes are resent, since replaying
+ * another write could apply it twice.
+ */
+async function apiFetch(path: string, init: RequestInit, resend: boolean): Promise<Response> {
+  await serverReady();
+  const send = () => fetch(`/api${path}`, { credentials: 'include', ...init });
+  // The server fell asleep since the last check (it idles out after 15 minutes).
+  const wakeAgain = () => {
+    serverStatus = 'unknown';
+    return serverReady();
+  };
+  try {
+    const res = await send();
+    if (!fromProxy(res)) return res;
+    if (!resend) {
+      void wakeAgain();
+      return res;
+    }
+  } catch (err) {
+    if (!resend) {
+      void wakeAgain();
+      throw err;
+    }
+  }
+  await wakeAgain();
+  return send();
+}
+
+const networkError = () =>
+  new ApiError(0, 'NETWORK_ERROR', 'Couldn’t reach the GitInsight server. Check your connection and try again in a moment.');
+
 /** Shares one in-flight refresh so parallel callers never replay a rotated token. */
 export function refreshSession(): Promise<AuthResponse | null> {
   refreshInFlight ??= (async () => {
     try {
-      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      const res = await apiFetch('/auth/refresh', { method: 'POST' }, true);
       const data: AuthResponse | null = res.ok ? await res.json() : null;
       accessToken = data?.accessToken ?? null;
       return data;
@@ -248,11 +341,17 @@ export function refreshSession(): Promise<AuthResponse | null> {
 
 /** POST to an endpoint that returns a file and save it with the server-provided name. */
 export async function downloadFile(path: string, body: unknown, retry = true): Promise<void> {
-  const res = await fetch(`/api${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-    body: JSON.stringify(body),
+  // Exports are read-only on the server, so resending one after a cold start is safe.
+  const res = await apiFetch(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify(body),
+    },
+    true,
+  ).catch(() => {
+    throw networkError();
   });
   if (res.status === 401 && retry && accessToken) {
     const session = await refreshSession();
@@ -277,11 +376,9 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res = await fetch(`/api${path}`, {
-    method: options.method ?? 'GET',
-    credentials: 'include',
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  const method = options.method ?? 'GET';
+  const res = await apiFetch(path, { method, headers, body: options.body !== undefined ? JSON.stringify(options.body) : undefined }, method === 'GET').catch(() => {
+    throw networkError();
   });
 
   if (res.status === 401 && retry && accessToken) {
@@ -291,12 +388,14 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   }
   if (res.status === 204) return undefined as T;
 
-  const isJson = res.headers.get('content-type')?.includes('application/json');
-  const data = isJson ? await res.json().catch(() => ({})) : {};
-  if (!res.ok) {
-    // A non-JSON error means something other than the GitInsight API answered (proxy, host error page, cold start).
-    const fallback = isJson
+  const json = isJson(res);
+  const data = json ? await res.json().catch(() => ({})) : {};
+  if (!res.ok || !json) {
+    // A non-JSON response means something other than the GitInsight API answered (proxy, host error page, cold start).
+    const fallback = json
       ? 'Request failed.'
+      : res.ok
+        ? 'The GitInsight server is still starting up. Please try again in a moment.'
       : res.status >= 502 && res.status <= 504
         ? 'The GitInsight server is starting up or unreachable. Please try again in a minute.'
         : `The GitInsight server didn’t respond as expected (status ${res.status}).`;
